@@ -2,12 +2,10 @@ module github.com/horm-database/go-horm/horm
 
 go 1.18
 
-replace github.com/horm-database/common => ../../common
-
 require (
 	github.com/golang/protobuf v1.5.3
 	github.com/gomodule/redigo v1.8.9
-	github.com/horm-database/common v0.0.0-00010101000000-000000000000
+	github.com/horm-database/common v0.0.1
 	github.com/json-iterator/go v1.1.12
 	github.com/polarismesh/polaris-go v1.5.3
 	gopkg.in/yaml.v3 v3.0.1
