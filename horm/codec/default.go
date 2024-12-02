@@ -344,22 +344,22 @@ func (dc *defaultCodec) setStruct(val interface{}, isInsert bool) map[string]int
 		}
 
 		iv := v.FieldByName(name)
+		isEmpty := types.IsEmptyValue(iv)
+
 		if dc.omitEmpty && (fs.OmitEmpty ||
 			(isInsert && fs.OmitInsertEmpty) ||
-			(!isInsert && fs.OmitReplaceEmpty)) &&
-			types.IsEmptyValue(iv) { // 忽略零值
+			(!isInsert && fs.OmitReplaceEmpty)) && isEmpty { // 忽略零值
 			continue
 		}
 
 		//自动插入当前时间，仅在值为零值时才自动赋值
-		if (fs.OnCreateTime || fs.OnUpdateTime) && types.IsEmptyValue(iv) {
+		if (fs.OnCreateTime || fs.OnUpdateTime) && isEmpty {
 			data[fs.Column] = nowTime(fs.Type)
-		} else if fs.OnUniqueID && isInsert && types.IsEmptyValue(iv) && iv.Kind() == reflect.Uint64 {
+		} else if fs.OnUniqueID && isInsert && isEmpty && iv.Kind() == reflect.Uint64 {
 			data[fs.Column] = snowflake.GenerateID()
 		} else {
 			data[fs.Column] = dc.getValue(fs, iv)
 		}
-
 	}
 
 	return data
@@ -392,11 +392,12 @@ func (dc *defaultCodec) setStructs(val interface{}, isInsert bool) []map[string]
 
 			if ignore := ignores[name]; !ignore {
 				iv := kv.FieldByName(name)
+				isEmpty := types.IsEmptyValue(iv)
 
 				//自动插入当前时间，仅在值为零值时才自动赋值
-				if (fs.OnCreateTime || fs.OnUpdateTime) && types.IsEmptyValue(iv) {
+				if (fs.OnCreateTime || fs.OnUpdateTime) && isEmpty {
 					data[fs.Column] = nowTime(fs.Type)
-				} else if fs.OnUniqueID && isInsert && types.IsEmptyValue(iv) && iv.Kind() == reflect.Uint64 {
+				} else if fs.OnUniqueID && isInsert && isEmpty && iv.Kind() == reflect.Uint64 {
 					data[fs.Column] = snowflake.GenerateID()
 				} else {
 					data[fs.Column] = dc.getValue(fs, iv)
