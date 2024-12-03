@@ -263,22 +263,33 @@ func Test(ctx context.Context) {
 
 有时候，可能需要返回多个结果，例如 redis 的 ZRangeByScoreWithScore：
 ```go
-func TestRedis(ctx context.Context) {
-	student := Student{
-		Sex:    "male",
-		Age:    19,
-		Name:   "smallhowcao",
-		Status: 1,
-	}
 
-	//horm 会对结构体参数自动编解码
-	err := horm.NewStatement("skynet").ZAdd("student_score", student, 97).Exec(ctx)
+birthday, _ := time.Parse("2006-01-02", "1987-08-27")
 
-	ret := make([]*Student, 0)
-	scores := make([]float64, 0)
-	err = horm.NewStatement("skynet").ZRangeByScoreWithScore("student_score", 70, 100).Exec(ctx, &ret, &scores)
+data := Student{
+  Identify: 430602198702221111,
+  Gender:   1,
+  Age:      19,
+  Name:     "smallhow",
+  Score:    92.1,
+  Image:    []byte("IMAGE.PCG"),
+  Article:  "Artificial Intelligence",
+  ExamTime: "15:30:00",
+  Birthday: birthday,
 }
+
+//horm 会对结构体参数自动编解码
+_, err := horm.NewQuery("student_score_range").ZAdd("student_score", data, data.Score).Exec(ctx)
+
+results := make([]*Student, 0)
+scores := make([]float64, 0)
+_, err = horm.NewQuery("student_score_range").ZRangeByScore("student_score", 70, 100, true).Exec(ctx, &results, &scores)
+
 ```
+
+[image](https://github.com/horm-database/image/blob/master/%E5%8D%95%E6%89%A7%E8%A1%8C%E5%8D%95%E5%85%83-1.png)
+
+
 ## 并行执行多条语句
 为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到代理服务器，由代理服务器并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句的返回 error 和返回结果。
 
