@@ -287,7 +287,7 @@ _, err = horm.NewQuery("student_score_range").ZRangeByScore("student_score", 70,
 
 ```
 
-[image](https://github.com/horm-database/image/blob/master/%E5%8D%95%E6%89%A7%E8%A1%8C%E5%8D%95%E5%85%83-1.png)
+![image](https://github.com/horm-database/image/blob/master/%E5%8D%95%E6%89%A7%E8%A1%8C%E5%8D%95%E5%85%83-1.png)
 
 
 ## 并行执行多条语句
