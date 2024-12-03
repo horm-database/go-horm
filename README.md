@@ -126,7 +126,7 @@ type StructSpec struct {
 一、为Query语句指定特定的客户端。二、配置全局客户端，在未指定特定客户端的情况下，所有 Query 都采用该全局客户端。
 
 ## 新建 horm client 连接
-* 指定客户端
+### 指定客户端
 我们首先通过 horm.NewClient 创建一个客户端，该函数的第一个参数是允许传入一个 caller name，
 他将读取配置文件 orm.yaml 里面的 server.caller.name 对应的数据统一接入服务 workspace_id、 encryption、token、target、appid、secret等信息，
 然后用 WithClient 为 Query 指定该 Client。
@@ -215,7 +215,7 @@ func Test(ctx context.Context) {
 }
 ```
 
-## 配置全局连接
+### 配置全局连接
 配置全局变量之后，如果 Query 没有用 WithClient 指定客户端的话，就使用全局客户端
 ```go
 package main
