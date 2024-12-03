@@ -9,7 +9,7 @@ const ( // 后端服务支持的数据库类型
   DBTypeElastic    = 1  // elastic search
   DBTypeMongo      = 2  // mongo 暂未支持
   DBTypeRedis      = 3  // redis
-  DBTypeMySQL      = 10 // mysql
+  DBTypeMySQL      = 10 // mysql  
   DBTypePostgreSQL = 11 // postgresql
   DBTypeClickHouse = 12 // clickhouse
   DBTypeOracle     = 13 // oracle 暂未支持
