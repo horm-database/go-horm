@@ -410,7 +410,7 @@ func Test(ctx context.Context) {
 ```
 
 # 数据名称（执行单元名）
-每个执行语句都需要指定一个数据名称，也叫执行单元名，表明我需要访问哪个数据，如下的 `horm.NewQuery("student(senior)") 中的 student` ，我们在 DB Proxy 可以通过 `数据名称` 找到对应的表/索引/redis 配置信息、及其数据库信息，然后执行 sql 语句或 elastic 请求 、 redis 请求。
+每个执行语句都需要指定一个数据名称，也叫执行单元名，表明我需要访问哪个数据，如下的 `horm.NewQuery("student(senior)") 中的 student` ，我们在 DB Proxy 可以通过 `数据名称` 找到对应的表/索引/redis 配置信息、及其数据库信息，然后执行 sql 语句、elastic 请求或 redis 请求。
 ```go
 package main
 import (
