@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -50,6 +51,8 @@ func (dc *defaultCodec) decodeBase(src interface{}, dest interface{}) (err error
 		return dc.assignBool(dest, s)
 	case []interface{}:
 		return dc.assignInterfaces(dest, s)
+	case json.Number:
+		return dc.assignString(dest, s.String())
 	case redigo.Error:
 		err = s
 	default:

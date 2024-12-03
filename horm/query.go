@@ -157,9 +157,9 @@ func (s *Query) GetCoder() codec.Codec {
 }
 
 // WithReceiver 接收返回，主要用于并发查询
-func (s *Query) WithReceiver(nilReceiver *bool, errReceiver *error, receiver ...interface{}) *Query {
-	s.IsNil = nilReceiver
-	s.RespError = errReceiver
+func (s *Query) WithReceiver(isNil *bool, err *error, receiver ...interface{}) *Query {
+	s.IsNil = isNil
+	s.RespError = err
 	s.Receiver = receiver
 	return s
 }

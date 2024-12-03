@@ -120,10 +120,10 @@ func (o *cli) PExec(ctx context.Context, q *Query) error {
 		}
 
 		if ret, ok := rspData[query.Key]; ok {
-			err = q.GetCoder().Decode(q.ResultType, ret, query.Receiver)
-			if err != nil {
+			err = query.GetCoder().Decode(query.ResultType, ret, query.Receiver)
+			if err != nil && query.RespError != nil {
 				*query.RespError = errs.Newf(errs.RetClientDecodeFail,
-					"[request_id=%d] %v, result=[%s]", q.RequestID, err, types.InterfaceToString(result))
+					"[request_id=%d] %v, result=[%s]", query.RequestID, err, types.InterfaceToString(result))
 			}
 		}
 

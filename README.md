@@ -1,5 +1,3 @@
-[TOC]
-
 # horm 介绍
 本文档是数据统一接入服务 UDAS（unified data access services）的客户端 golang sdk，完整实现了数据统一接入协议，支持 elastic search、redis、mysql/postgresql/clickhouse 等数据库相关操作。
 
@@ -109,16 +107,6 @@ type FieldSpec struct {
   OnUniqueID       bool   // 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突
 }
 
-var (
-  locker = new(sync.RWMutex)
-  cache  = make(map[reflect.Type]*StructSpec)
-)
-
-type StructSpec struct {
-  M  map[string]*FieldSpec
-  Cm map[string]*FieldSpec
-  Fs []*FieldSpec
-}
 ```
 
 # horm 客户端
@@ -293,31 +281,39 @@ _, err = horm.NewQuery("student_score_range").
 
 
 ## 并行执行多条语句
-为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到代理服务器，由代理服务器并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句的返回 error 和返回结果。
+为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
 
 `注意：如果多条语句访问同一张表，为了区别，可以像下面一样在括号里面加别名`
 ```go
-func Test(ctx context.Context) {
-	student := Student{
-		Sex:    "male",
-		Age:    19,
-		Name:   "smallhowcao",
-		Status: 1,
-	}
-	
-	var err1, err2 error
-	ret := make([]*Student, 0)
-	scores := make([]float64, 0)
-	
-	//下面操作有加别名
-	err := horm.NewStatement("skynet(zadd)").ZAdd("student_score", student, 65).WithReceiver(_, &err1).
-		Next("skynet(range_by_score)").ZRangeByScoreWithScore("student_score", 70, 100).WithReceiver(&err2, &ret, &scores).
-		PExec(ctx)
+birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+data := Student{
+    Identify: 430602198702221111,
+    Gender:   1,
+    Age:      19,
+    Name:     "smallhow",
+    Score:    92.1,
+    Image:    []byte("IMAGE.PCG"),
+    Article:  "Artificial Intelligence",
+    ExamTime: "15:30:00",
+    Birthday: birthday,
 }
+
+var isNil bool
+var zaddErr, rangeErr error
+results := make([]*Student, 0)
+scores := make([]float64, 0)
+
+//下面操作有加别名
+err := horm.NewQuery("student_score_range(zadd)").
+            ZAdd("student_score", &data, data.Score).WithReceiver(nil, &zaddErr).
+            Next("student_score_range(range)").
+            ZRangeByScore("student_score", 70, 100, true).WithReceiver(&isNil, &rangeErr, &results, &scores).
+            PExec(ctx)
 ```
 
-## 复合执行
+![image](https://github.com/horm-database/image/blob/master/%E5%8D%95%E6%89%A7%E8%A1%8C%E5%8D%95%E5%85%83-1.png)
 
+## 复合执行
 ## error 判断
 ### IsError
 `horm.IsError(err)` 可以判断是否执行失败，如果是 nil returned 错误，不是真正的错误，而是数据为空，或者 redis key 不存在。

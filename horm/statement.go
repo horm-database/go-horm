@@ -46,10 +46,10 @@ func (s *Query) Name(name string) *Query {
 		s.Error = errs.Newf(errs.RetClientUnitNameEmpty, "unit name is empty")
 	}
 
-	if unitName != "" {
-		s.Key = unitName
-	} else {
+	if alias != "" {
 		s.Key = alias
+	} else {
+		s.Key = unitName
 	}
 
 	return s
