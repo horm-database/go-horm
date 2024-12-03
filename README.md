@@ -279,11 +279,13 @@ data := Student{
 }
 
 //horm 会对结构体参数自动编解码
-_, err := horm.NewQuery("student_score_range").ZAdd("student_score", data, data.Score).Exec(ctx)
+_, err := horm.NewQuery("student_score_range").
+	ZAdd("student_score", data, data.Score).Exec(ctx)
 
 results := make([]*Student, 0)
 scores := make([]float64, 0)
-_, err = horm.NewQuery("student_score_range").ZRangeByScore("student_score", 70, 100, true).Exec(ctx, &results, &scores)
+_, err = horm.NewQuery("student_score_range").
+	ZRangeByScore("student_score", 70, 100, true).Exec(ctx, &results, &scores)
 
 ```
 
