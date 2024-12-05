@@ -9,7 +9,7 @@ const ( // 后端服务支持的数据库类型
   DBTypeElastic    = 1  // elastic search
   DBTypeMongo      = 2  // mongo 暂未支持
   DBTypeRedis      = 3  // redis
-  DBTypeMySQL      = 10 // mysql  
+  DBTypeMySQL      = 10 // mysql
   DBTypePostgreSQL = 11 // postgresql
   DBTypeClickHouse = 12 // clickhouse
   DBTypeOracle     = 13 // oracle 暂未支持
@@ -266,12 +266,12 @@ data := Student{
 }
 
 //horm 会对结构体参数自动编解码
-_, err := horm.NewQuery("student_score_range").
+_, err := horm.NewQuery("redis_student_rank").
 	ZAdd("student_score", data, data.Score).Exec(ctx)
 
 results := make([]*Student, 0)
 scores := make([]float64, 0)
-_, err = horm.NewQuery("student_score_range").
+_, err = horm.NewQuery("redis_student_rank").
 	ZRangeByScore("student_score", 70, 100, true).Exec(ctx, &results, &scores)
 
 ```
@@ -303,9 +303,9 @@ results := make([]*Student, 0)
 scores := make([]float64, 0)
 
 //下面操作有加别名
-err := horm.NewQuery("student_score_range(zadd)").
+err := horm.NewQuery("redis_student_rank(zadd)").
             ZAdd("student_score", &data, data.Score).WithReceiver(nil, &zaddErr).
-            Next("student_score_range(range)").
+            Next("redis_student_rank(range)").
             ZRangeByScore("student_score", 70, 100, true).WithReceiver(&isNil, &rangeErr, &results, &scores).
             PExec(ctx)
 ```
@@ -428,7 +428,7 @@ func Test(ctx context.Context) {
 ```
 
 ## 别名
-在并发执行、复合执行场景下，同一层级的多条语句如果访问同一张表，为了结果的正常，我们需要最好在括号里加上别名，如下代码的`horm.NewQuery("skynet(zadd)")` 和 `Next("skynet(range_by_score)")` ，我们都是访问 BDB 库 skynet。
+在并发执行、复合执行场景下，同一层级的多条语句如果访问同一张表，为了结果的正常，我们最好在括号里加上别名，如下代码的`horm.NewQuery("skynet(zadd)")` 和 `Next("skynet(range_by_score)")` ，我们都是访问 BDB 库 skynet。
 ```go
 func Test(ctx context.Context) {
 	student := Student{
