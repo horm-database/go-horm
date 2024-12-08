@@ -78,8 +78,8 @@ type Student struct {
   Age       uint      `orm:"age,int unsigned,omitreplaceempty" json:"age"`        //omitreplaceempty 替换忽略零值
   Name      string    `orm:"name,varchar,omitupdateempty" json:"name"`            //omitupdateempty 更新忽略零值
   Score     float64   `orm:"score,double,omitempty" json:"score"`           
-  Image     []byte    `orm:"image,blob,omitempty" json:"image"`                   //omitempty 忽略零值，= omitinsertempty + omitreplaceempty + omitupdateempty 表示插入、替换、更新都忽略零值，如 Auto Increment 需要
-  Article   string    `orm:"article,text,omitempty" json:"article"`       
+  Image     []byte    `orm:"image,blob,omitempty" json:"image"`                   
+  Article   string    `orm:"article,text,omitempty" json:"article"`               //omitempty 忽略零值，= omitinsertempty + omitreplaceempty + omitupdateempty 表示插入、替换、更新都忽略零值，如 Auto Increment 需要
   ExamTime  string    `orm:"exam_time,time,omitempty" json:"exam_time"`         
   Birthday  time.Time `orm:"birthday,date" json:"birthday"`                      
   CreatedAt time.Time `orm:"created_at,timestamp,oncreatetime" json:"created_at"` //oncreatetime 插入时自动初始化为当前时间
@@ -229,7 +229,7 @@ func Test(ctx context.Context) {
 
 # 执行模式
 ## 单执行单元
-执行单条语句，`isNil`, `error` 直接通过 Exec 函数返回，当查询结果为空时，isNil=true， 可以将 result 指针传入 Exec 第二个参数，接收返回结果。
+执行单条语句，`isNil`, `error` 直接通过 Exec 函数返回，当查询结果为空时，isNil=true，可以将 result 指针传入 Exec 第二个参数，接收返回结果。
 ```go
 package main
 import (
@@ -248,7 +248,7 @@ func Test(ctx context.Context) {
 }
 ```
 
-有时候，可能需要返回多个结果，例如 redis 的 ZRangeByScoreWithScore：
+有时候，可能需要返回多个结果，例如 redis 的 ZRangeByScore：
 ```go
 
 birthday, _ := time.Parse("2006-01-02", "1987-08-27")
@@ -266,13 +266,13 @@ data := Student{
 }
 
 //horm 会对结构体参数自动编解码
-_, err := horm.NewQuery("redis_student_rank").
-	ZAdd("student_score", data, data.Score).Exec(ctx)
+_, err := horm.NewQuery("redis_student").
+	ZAdd("student_score_rank", data, data.Score).Exec(ctx)
 
 results := make([]*Student, 0)
 scores := make([]float64, 0)
-_, err = horm.NewQuery("redis_student_rank").
-	ZRangeByScore("student_score", 70, 100, true).Exec(ctx, &results, &scores)
+_, err = horm.NewQuery("redis_student").
+	ZRangeByScore("student_score_rank", 70, 100, true).Exec(ctx, &results, &scores)
 
 ```
 
@@ -282,7 +282,8 @@ _, err = horm.NewQuery("redis_student_rank").
 ## 并行执行多条语句
 为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
 
-`注意：如果多条语句访问同一张表，为了区别，可以像下面一样在括号里面加别名`
+`注意：如果并行执行访问同一个数据时，为了区别，可以像下面一样在括号里面加别名：redis_student(zadd) 和 redis_student(range)`
+
 ```go
 birthday, _ := time.Parse("2006-01-02", "1987-08-27")
 data := Student{
@@ -302,18 +303,78 @@ var zaddErr, rangeErr error
 results := make([]*Student, 0)
 scores := make([]float64, 0)
 
-//下面操作有加别名
-err := horm.NewQuery("redis_student_rank(zadd)").
-            ZAdd("student_score", &data, data.Score).WithReceiver(nil, &zaddErr).
-            Next("redis_student_rank(range)").
-            ZRangeByScore("student_score", 70, 100, true).WithReceiver(&isNil, &rangeErr, &results, &scores).
+//下面的 query name 有加别名
+err := horm.NewQuery("redis_student(zadd)").
+            ZAdd("student_score_rank", &data, data.Score).WithReceiver(nil, &zaddErr).
+            Next("redis_student(range)").
+            ZRangeByScore("student_score_rank", 70, 100, true).WithReceiver(&isNil, &rangeErr, &results, &scores).
             PExec(ctx)
 ```
 
 ![image](https://github.com/horm-database/image/blob/master/%E5%8D%95%E6%89%A7%E8%A1%8C%E5%8D%95%E5%85%83-1.png)
 
 ## 复合执行
-## error 判断
+```json
+[
+  {
+    "name": "student",
+    "op": "find_all",
+    "size": 100,
+    "sub": [
+      {
+        "name": "student_course(sc)",
+        "op": "find_all",
+        "where": {
+          "@identify": "identify"
+        },
+        "size": 100
+      },
+      {
+        "name": "redis_student(rank)",
+        "op": "zrank",
+        "key": "student_score_rank",
+        "args": [
+          "@{identify}"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "course_info",
+    "op": "find_all",
+    "where": {
+      "@course": "/student/sc.course"
+    },
+    "size": 100
+  }
+]
+```
+## 返回结果
+### IsNil
+当数据源为 mysql、clickhouse、es 等数据库时，如果 Find或者 FindAll 查询的数据为空时，返回参数 isNil=true， 否则，返回参数为 false，
+而当数据源为 redis 时，只有 redis 返回 redigo: nil returned 错误时，才会使得 isNil = true，其他时候都是 isNil = false，即便如下 ZRangeByScore 去查询一个不存在的有序集时。
+```go
+// 查询单条 mysql 数据
+var result Student
+where := horm.Where{"name": "noexist"}
+isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result) // isNil = true
+
+// 查询多条 mysql 数据
+var results []*Student
+where = horm.Where{"name": "noexists"}
+isNil, err = horm.NewQuery("student").FindAll(where).Exec(ctx, &results) // isNil = true
+
+// redis 中 GET 缓存
+var stu Student
+isNil, err = horm.NewQuery("redis_student").Get("noexists").Exec(ctx, &stu) // isNil = true
+
+// redis ZRangeByScore
+rets := make([]*Student, 0)
+scores := make([]float64, 0)
+isNil, err = horm.NewQuery("redis_student"). // isNil = false ， rets 和 scores 为空数组
+ZRangeByScore("noexists", 70, 100, true).Exec(ctx, &rets, &scores)
+```
+
 ### IsError
 `horm.IsError(err)` 可以判断是否执行失败，如果是 nil returned 错误，不是真正的错误，而是数据为空，或者 redis key 不存在。
 
@@ -330,26 +391,8 @@ func Test(ctx context.Context) {
 	if horm.IsNil(err) { // err = nil returned，所有空数据都返回这个错误。
 		fmt.Printf("not fine student")
 	}
-	...
-}
-```
-
-### IsNil
-FindOne、FindAll、Redis 的 Get 等函数，都可以用 `horm.IsNil` 来判断返回结果是否为空。
-
-```go
-func Test(ctx context.Context) {
-	var result = make([]*Students, 0)
-	err := horm.NewQuery("student").FindAll().Exec(ctx, &result)
 	
-	if horm.IsError(err) {
-		fmt.Printf("find student error: %v", err)
-		return
-	}
-
-	if horm.IsNil(err) { // err = nil returned，所有返回空数据都报这个错误。
-		fmt.Printf("not fine student")
-	}
+	
 	...
 }
 ```
@@ -443,8 +486,8 @@ func Test(ctx context.Context) {
 	scores := make([]float64, 0)
 	
 	//下面操作有加别名
-	err := horm.NewQuery("skynet(zadd)").ZAdd("student_score", student, 65).WithReceiver(&err1).
-		Next("skynet(range_by_score)").ZRangeByScoreWithScore("student_score", 70, 100).WithReceiver(&err2, &ret, &scores).
+	err := horm.NewQuery("skynet(zadd)").ZAdd("student_score_rank", student, 65).WithReceiver(&err1).
+		Next("skynet(range_by_score)").ZRangeByScoreWithScore("student_score_rank", 70, 100).WithReceiver(&err2, &ret, &scores).
 		PExec(ctx)
 }
 ```
