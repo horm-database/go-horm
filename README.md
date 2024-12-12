@@ -34,7 +34,7 @@ const ( // 后端服务支持的数据库类型
 ```sql
 CREATE TABLE `student` (
     `id` int NOT NULL AUTO_INCREMENT,
-    `identify` bigint NOT NULL COMMENT '身份证件ID',
+    `identify` bigint NOT NULL COMMENT '学生编号',
     `gender` tinyint NOT NULL DEFAULT '1' COMMENT '1-male 2-female',
     `age` int unsigned NOT NULL DEFAULT '0' COMMENT '年龄',
     `name` varchar(64) NOT NULL COMMENT '名称',
@@ -46,7 +46,34 @@ CREATE TABLE `student` (
     `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
     PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COMMENT='学生表'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生表';
+
+CREATE TABLE `student_course` (
+    `id` int NOT NULL AUTO_INCREMENT,
+    `identify` bigint NOT NULL COMMENT '学生编号',
+    `course` varchar(64) NOT NULL COMMENT '课程',
+    `hours` int DEFAULT '0' COMMENT '课时数',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生课程表';
+
+CREATE TABLE `course_info` (
+    `course` varchar(64) NOT NULL COMMENT '课程',
+    `teacher` varchar(64) NOT NULL COMMENT '课程老师',
+    `time` time NOT NULL COMMENT '上课时间',
+    PRIMARY KEY (`course`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程信息';
+
+CREATE TABLE `teacher_info` (
+    `teacher` varchar(32) NOT NULL COMMENT '老师',
+    `age` int NOT NULL DEFAULT '0' COMMENT '年龄',
+    PRIMARY KEY (`teacher`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='老师信息';
+
+CREATE TABLE `score_rank_reward` (
+    `rank` int NOT NULL COMMENT '排名',
+    `reward` varchar(128) NOT NULL DEFAULT '' COMMENT '奖励',
+    PRIMARY KEY (`rank`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分数排名奖励'
 ```
 
 ## golang 结构体：
@@ -64,6 +91,31 @@ type Student struct {
   Birthday  time.Time `orm:"birthday,date" json:"birthday"`                       //出生日期
   CreatedAt time.Time `orm:"created_at,timestamp,oncreatetime" json:"created_at"` //创建时间
   UpdatedAt time.Time `orm:"updated_at,datetime,onupdatetime" json:"updated_at"`  //修改时间
+}
+```
+
+```go
+type StudentCourse struct {
+  Id       uint64 `orm:"id,int,omitempty" json:"id"`
+  Identify int64  `orm:"identify,bigint" json:"identify"` //学生编号
+  Course   string `orm:"course,varchar" json:"course"`    //课程
+  Hours    int    `orm:"hours,int" json:"hours"`          //课时数
+}
+
+type CourseInfo struct {
+  Course  string `orm:"course,varchar" json:"course"`   //课程
+  Teacher string `orm:"teacher,varchar" json:"teacher"` //课程老师
+  Time    string `orm:"time,time" json:"time"`          //上课时间
+}
+
+type TeacherInfo struct {
+  Teacher string `orm:"teacher,varchar" json:"teacher"` //课程老师
+  Age     int    `orm:"age,int" json:"age"`             //年龄
+}
+
+type ScoreRankReward struct {
+  Rank   int    `orm:"rank,int" json:"rank"`         //排名
+  Reward string `orm:"reward,varchar" json:"reward"` //奖励
 }
 ```
 
@@ -254,13 +306,13 @@ func Test(ctx context.Context) {
 birthday, _ := time.Parse("2006-01-02", "1987-08-27")
 
 data := Student{
-  Identify: 430602198702221111,
+  Identify: 2024070733,
   Gender:   1,
   Age:      19,
   Name:     "smallhow",
   Score:    92.1,
   Image:    []byte("IMAGE.PCG"),
-  Article:  "Artificial Intelligence",
+  Article:  "For pioneering work in the fields of cryptography and complex theory",
   ExamTime: "15:30:00",
   Birthday: birthday,
 }
