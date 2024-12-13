@@ -80,7 +80,7 @@ CREATE TABLE `score_rank_reward` (
 ```go
 type Student struct {
   Id        int       `orm:"id,int,onuniqueid" json:"id"`
-  Identify  int64     `orm:"identify,bigint" json:"identify"`                     //身份证件ID
+  Identify  int64     `orm:"identify,bigint" json:"identify"`                     //学生编号
   Gender    int8      `orm:"gender,tinyint,omitinsertempty" json:"gender"`        //1-male 2-female
   Age       uint      `orm:"age,int unsigned,omitreplaceempty" json:"age"`        //年龄
   Name      string    `orm:"name,varchar,omitupdateempty" json:"name"`            //名称
@@ -124,9 +124,9 @@ type ScoreRankReward struct {
 ```golang
 //示例结构体
 type Student struct {
-  Id        int       `orm:"id,int,onuniqueid" json:"id"`                         //onuniqueid 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，每个实例不一样。否则可能会有冲突
+  Id        int       `orm:"id,int,onuniqueid" json:"id"`                         //onuniqueid 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，每个实例不一样。否则可能会有冲突，当然，你也可以采用数据库的自增id作为主键，这时候，最好加上 omitempty 。
   Identify  int64     `orm:"identify,bigint" json:"identify"`                     
-  Gender    int8      `orm:"gender,tinyint,omitinsertempty" json:"gender"`        //omitinsertempty 插入忽略零值
+  Gender    int8      `orm:"gender,tinyint,omitinsertempty" json:"gender"`        //omitinsertempty 插入忽略零值，即在插入数据的时候，如果 Gender 字段为零值，则 insert sql 语句会忽略这个字段。
   Age       uint      `orm:"age,int unsigned,omitreplaceempty" json:"age"`        //omitreplaceempty 替换忽略零值
   Name      string    `orm:"name,varchar,omitupdateempty" json:"name"`            //omitupdateempty 更新忽略零值
   Score     float64   `orm:"score,double,omitempty" json:"score"`           
@@ -172,21 +172,19 @@ type FieldSpec struct {
 我们可能会访问多个数据统一接入服务的不同数据（每个服务都有唯一的 workspace id）。
 
 ```go
-package main
 import (
-	...
-	"github.com/horm-database/go-horm/horm"
+  ...
+  "github.com/horm-database/go-horm/horm"
 )
 
-...
-
-func Test(ctx context.Context) {
-	//创建 db server 连接
+func queryByClient(ctx context.Context) {
+  ...
+	
   cli := horm.NewClient("ws_test.app1.server1.service1")
-  
+
   var result = make([]*Student, 0)
   _, err := horm.NewQuery("student").FindAll().WithClient(cli).Exec(ctx, &result)
-  
+
   ...
 }
 
@@ -236,17 +234,24 @@ log:
 另外，horm 提供 WithAppID、WithSecret 等一系列函数来为 Client 指定参数。
 
 ```go
-package main
 import (
-	...
-   "github.com/horm-database/go-horm/horm"
+  ...
+  "github.com/horm-database/common/codec"
+  "github.com/horm-database/go-horm/horm"
 )
 
-func Test(ctx context.Context) {
-  cli := horm.NewClient("ws_test.app2.server2.service2",
-    horm.WithAppID(10099),
-    horm.WithSecret("S499721834"))
-
+func queryByClientWithOption(ctx context.Context) {
+  ...
+  
+  cli := horm.NewClient("",
+  horm.WithWorkspaceID(31),
+  horm.WithEncryption(codec.FrameTypeSignature),
+  horm.WithToken("QUIs32ODQUIs32OD"),
+  horm.WithTarget("ip://127.0.0.1:8180"),
+  horm.WithAppID(10099),
+  horm.WithSecret("S499721834"),
+  horm.WithTimeout(500))
+  
   var result = make([]*Student, 0)
   _, err := horm.NewQuery("student").FindAll().WithClient(cli).Exec(ctx, &result)
   
@@ -254,26 +259,26 @@ func Test(ctx context.Context) {
 }
 ```
 
-### 配置全局连接
+### 配置全局Client
 配置全局变量之后，如果 Query 没有用 WithClient 指定客户端的话，就使用全局客户端
 ```go
-package main
 import (
 	...
 	"github.com/horm-database/go-horm/horm"
 )
-
-...
 
 //init 配置全局Client
 func init() {
   horm.SetGlobalClient("ws_test.app1.server1.service1")
 }
 
-func Test(ctx context.Context) {
-  var result = make([]*Student, 0)
-  _, err := horm.NewQuery("student").FindAll().Exec(ctx, &result)
-  
+func queryByGlobalClient(ctx context.Context) {
+  ...
+
+  var result = Student{}
+  where := horm.Where{"identify": 2024061211}
+  isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result)
+
   ...
 }
 
@@ -289,46 +294,50 @@ import (
 	"github.com/horm-database/go-horm/horm"
 )
 
-...
+func queryByGlobalClient(ctx context.Context) {
+  ...
 
-func Test(ctx context.Context) {
-  var result Student
-  var where = horm.Where{"id": 13}
+  var result = Student{}
+  where := horm.Where{"identify": 2024061211}
   isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result)
-	
+
   ...
 }
 ```
 
-有时候，可能需要返回多个结果，例如 redis 的 ZRangeByScore：
+有时候，可能会返回多个结果，需要两个参数去接受结果，例如 redis 的 ZRangeByScore：
 ```go
 
-birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+func queryMultiReturn(ctx context.Context) {
+  ...
 
-data := Student{
-  Identify: 2024070733,
-  Gender:   1,
-  Age:      19,
-  Name:     "smallhow",
-  Score:    92.1,
-  Image:    []byte("IMAGE.PCG"),
-  Article:  "For pioneering work in the fields of cryptography and complex theory",
-  ExamTime: "15:30:00",
-  Birthday: birthday,
+  birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+  data := Student{
+    Identify: 2024080313,
+    Gender:   2,
+    Age:      23,
+    Name:     "kitty",
+    Score:    91.5,
+    Image:    []byte("IMAGE.PCG"),
+    Article:  "Artificial Intelligence",
+    ExamTime: "15:30:00",
+    Birthday: birthday,
+  }
+  
+  _, err := horm.NewQuery("redis_student").
+	  ZAdd("student_age_rank", data, data.Age).Exec(ctx)
+  
+  results := make([]*Student, 0)
+  scores := make([]float64, 0)
+  _, err = horm.NewQuery("redis_student").
+	  ZRangeByScore("student_age_rank", 10, 50, true).Exec(ctx, &results, &scores)
+
+  ...
 }
-
-//horm 会对结构体参数自动编解码
-_, err := horm.NewQuery("redis_student").
-	ZAdd("student_score_rank", data, data.Score).Exec(ctx)
-
-results := make([]*Student, 0)
-scores := make([]float64, 0)
-_, err = horm.NewQuery("redis_student").
-	ZRangeByScore("student_score_rank", 70, 100, true).Exec(ctx, &results, &scores)
 
 ```
 
-![image](https://github.com/horm-database/image/blob/master/%E5%8D%95%E6%89%A7%E8%A1%8C%E5%8D%95%E5%85%83-1.png)
+![image](https://github.com/horm-database/image/blob/master/4-1.png)
 
 
 ## 并行执行多条语句

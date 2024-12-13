@@ -99,9 +99,9 @@ func WithWorkspaceID(workspaceID int) Option {
 }
 
 // WithEncryption returns an Option that sets encryption of frame.
-func WithEncryption(token string) Option {
+func WithEncryption(encryption int8) Option {
 	return func(o *Options) {
-		o.Token = token
+		o.Encryption = encryption
 	}
 }
 
