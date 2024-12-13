@@ -140,7 +140,7 @@ type Student struct {
 ```
 
 ```go
-//hrom 会将上面结构体的 orm 标签解析后，每个 field 结果存入下面的结构体中，并缓存到内存
+//horm 会将上面结构体的 orm 标签解析后，每个 field 结果存入下面的结构体中，并缓存到内存
 // FieldSpec body 标签解析结果
 type FieldSpec struct {
   Tag              string // tag
@@ -178,8 +178,6 @@ import (
 )
 
 func queryByClient(ctx context.Context) {
-  ...
-	
   cli := horm.NewClient("ws_test.app1.server1.service1")
 
   var result = make([]*Student, 0)
@@ -241,8 +239,6 @@ import (
 )
 
 func queryByClientWithOption(ctx context.Context) {
-  ...
-  
   cli := horm.NewClient("",
   horm.WithWorkspaceID(31),
   horm.WithEncryption(codec.FrameTypeSignature),
@@ -273,8 +269,6 @@ func init() {
 }
 
 func queryByGlobalClient(ctx context.Context) {
-  ...
-
   var result = Student{}
   where := horm.Where{"identify": 2024061211}
   isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result)
@@ -288,18 +282,15 @@ func queryByGlobalClient(ctx context.Context) {
 ## 单执行单元
 执行单条语句，`isNil`, `error` 直接通过 Exec 函数返回，当查询结果为空时，isNil=true，可以将 result 指针传入 Exec 第二个参数，接收返回结果。
 ```go
-package main
 import (
 	...
 	"github.com/horm-database/go-horm/horm"
 )
 
-func queryByGlobalClient(ctx context.Context) {
-  ...
-
-  var result = Student{}
-  where := horm.Where{"identify": 2024061211}
-  isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result)
+func queryModeSingle(ctx context.Context) {
+  var result = []*Student{}
+  where := horm.Where{"name ~": "%caohao%"}
+  isNil, err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
 
   ...
 }
@@ -307,10 +298,7 @@ func queryByGlobalClient(ctx context.Context) {
 
 有时候，可能会返回多个结果，需要两个参数去接受结果，例如 redis 的 ZRangeByScore：
 ```go
-
 func queryMultiReturn(ctx context.Context) {
-  ...
-
   birthday, _ := time.Parse("2006-01-02", "1987-08-27")
   data := Student{
     Identify: 2024080313,
@@ -325,13 +313,13 @@ func queryMultiReturn(ctx context.Context) {
   }
   
   _, err := horm.NewQuery("redis_student").
-	  ZAdd("student_age_rank", data, data.Age).Exec(ctx)
+        ZAdd("student_age_rank", data, float64(data.Age)).Exec(ctx)
   
   results := make([]*Student, 0)
-  scores := make([]float64, 0)
+  ages := make([]float64, 0)
   _, err = horm.NewQuery("redis_student").
-	  ZRangeByScore("student_age_rank", 10, 50, true).Exec(ctx, &results, &scores)
-
+        ZRangeByScore("student_age_rank", 10, 50, true).Exec(ctx, &results, &ages)
+  
   ...
 }
 
@@ -348,15 +336,15 @@ func queryMultiReturn(ctx context.Context) {
 ```go
 birthday, _ := time.Parse("2006-01-02", "1987-08-27")
 data := Student{
-    Identify: 430602198702221111,
-    Gender:   1,
-    Age:      19,
-    Name:     "smallhow",
-    Score:    92.1,
-    Image:    []byte("IMAGE.PCG"),
-    Article:  "Artificial Intelligence",
-    ExamTime: "15:30:00",
-    Birthday: birthday,
+  Identify: 2024080313,
+  Gender:   2,
+  Age:      23,
+  Name:     "kitty",
+  Score:    91.5,
+  Image:    []byte("IMAGE.PCG"),
+  Article:  "Artificial Intelligence",
+  ExamTime: "15:30:00",
+  Birthday: birthday,
 }
 
 var isNil bool
@@ -365,14 +353,13 @@ results := make([]*Student, 0)
 scores := make([]float64, 0)
 
 //下面的 query name 有加别名
-err := horm.NewQuery("redis_student(zadd)").
-            ZAdd("student_score_rank", &data, data.Score).WithReceiver(nil, &zaddErr).
-            Next("redis_student(range)").
-            ZRangeByScore("student_score_rank", 70, 100, true).WithReceiver(&isNil, &rangeErr, &results, &scores).
+err := horm.NewQuery("redis_student(zadd)").ZAdd("student_age_rank", &data, data.Score).WithReceiver(nil, &zaddErr).
+            Next("student_age_rank(range)").ZAdd("student_score_rank", 
+				70, 100, true).WithReceiver(&isNil, &rangeErr, &results, &scores).
             PExec(ctx)
 ```
 
-![image](https://github.com/horm-database/image/blob/master/%E5%8D%95%E6%89%A7%E8%A1%8C%E5%8D%95%E5%85%83-1.png)
+![image](https://github.com/horm-database/image/blob/master/4-1.png)
 
 ## 复合执行
 ```json
