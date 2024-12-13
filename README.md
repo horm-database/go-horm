@@ -325,41 +325,49 @@ func queryMultiReturn(ctx context.Context) {
 
 ```
 
+返回结果如下：
 ![image](https://github.com/horm-database/image/blob/master/4-1.png)
 
 
 ## 并行执行多条语句
 为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
 
-`注意：如果并行执行访问同一个数据时，为了区别，可以像下面一样在括号里面加别名：redis_student(zadd) 和 redis_student(range)`
+`注意：如果并行执行访问同一个数据时，为了区别，可以像下面一样在括号里面加别名：redis_student(zadd) 和 redis_student(range)
+另外注意看返回结果，我们可以看到，ZRangeByScore 只返回了一个2个结果，也就是 ZAdd 的数据并未出现在 ZRangeByScore 结果中，
+这是因为在并发执行过程中，两者执行有先后顺序，有可能 ZRangeByScore 先于 ZAdd 执行，这样就导致数据还未插入完成便获取了排序结果，这显然与我们的预期不符，
+所以当遇到后一个两者执行语句有先后要求时候，我们最好是拆成两条独立的语句，而不是放在一个并发执行中。`
 
 ```go
-birthday, _ := time.Parse("2006-01-02", "1987-08-27")
-data := Student{
-  Identify: 2024080313,
-  Gender:   2,
-  Age:      23,
-  Name:     "kitty",
-  Score:    91.5,
-  Image:    []byte("IMAGE.PCG"),
-  Article:  "Artificial Intelligence",
-  ExamTime: "15:30:00",
-  Birthday: birthday,
+func queryModeParallel(ctx context.Context) {
+  birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+    data := Student{
+    Identify: 2024080313,
+    Gender:   2,
+    Age:      23,
+    Name:     "kitty",
+    Score:    91.5,
+    Image:    []byte("IMAGE.PCG"),
+    Article:  "Artificial Intelligence",
+    ExamTime: "15:30:00",
+    Birthday: birthday,
+  }
+  
+  var isNil bool
+  var zaddErr, rangeErr error
+  results := make([]*Student, 0)
+  ages := make([]float64, 0)
+  
+  //下面操作有加别名
+  err := horm.NewQuery("redis_student(zadd)").ZAdd("student_age_rank", &data, float64(data.Age)).WithReceiver(nil, &zaddErr).
+  Next("redis_student(range)").ZRangeByScore("student_age_rank", 10, 50, true).WithReceiver(&isNil, &rangeErr, &results, &ages).
+  PExec(ctx)
+  
+  ...
 }
-
-var isNil bool
-var zaddErr, rangeErr error
-results := make([]*Student, 0)
-scores := make([]float64, 0)
-
-//下面的 query name 有加别名
-err := horm.NewQuery("redis_student(zadd)").ZAdd("student_age_rank", &data, data.Score).WithReceiver(nil, &zaddErr).
-            Next("student_age_rank(range)").ZAdd("student_score_rank", 
-				70, 100, true).WithReceiver(&isNil, &rangeErr, &results, &scores).
-            PExec(ctx)
 ```
 
-![image](https://github.com/horm-database/image/blob/master/4-1.png)
+返回结果如下：
+![image](https://github.com/horm-database/image/blob/master/4-2.png)
 
 ## 复合执行
 ```json
