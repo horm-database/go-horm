@@ -329,10 +329,11 @@ func queryMultiReturn(ctx context.Context) {
 ![image](https://github.com/horm-database/image/blob/master/4-1.png)
 
 
-## 并行执行多条语句
+## 并行执行
 为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
 
 `注意：如果并行执行访问同一个数据时，为了区别，可以像下面一样在括号里面加别名：redis_student(zadd) 和 redis_student(range)。`<br><br>
+
 `另外我们注意看返回结果，ZRangeByScore 仅返回了2条数据，实际上应该有3条数据，也就是 ZAdd 的数据并未出现在 ZRangeByScore 结果中， 这是
 因为在并发执行过程中，两个语句是同时执行，我们并不知道哪个语句先执行完，如果 ZRangeByScore 先于 ZAdd 执行完成，就会导致数据还未插入完成就
 获取了排序结果，这显然与我们的预期不符，所以当遇到两条执行语句有先后要求时，我们最好拆成两条独立的语句先后执行，而不是放在一个并发执行中。`
@@ -359,54 +360,260 @@ func queryModeParallel(ctx context.Context) {
   
   //下面操作有加别名
   err := horm.NewQuery("redis_student(zadd)").
-  ZAdd("student_age_rank", &data, float64(data.Age)).WithReceiver(nil, &zaddErr).
-  Next("redis_student(range)").
-  ZRangeByScore("student_age_rank", 10, 50, true).WithReceiver(&isNil, &rangeErr, &results, &ages).
-  PExec(ctx)
+	  ZAdd("student_age_rank", &data, float64(data.Age)).WithReceiver(nil, &zaddErr).
+	  Next("redis_student(range)").
+	  ZRangeByScore("student_age_rank", 10, 50, true).WithReceiver(&isNil, &rangeErr, &results, &ages).
+	  PExec(ctx)
   
   ...
 }
 ```
 
 返回结果如下：<br>
+
 ![image](https://github.com/horm-database/image/blob/master/4-2.png)
 
 ## 复合执行
+```go
+import (
+	...
+    "github.com/horm-database/common/proto"
+    "github.com/horm-database/go-horm/horm"
+)
+
+func queryModeCompound(ctx context.Context) {
+  type RetInfo struct {
+    Student struct {
+      proto.CompBase // 返回基础信息
+      Data []*struct {
+        Student
+        StudentCourse struct {
+          proto.CompBase
+          Data []*struct {
+            StudentCourse
+            CourseInfo struct {
+              proto.CompBase
+              Data *CourseInfo `json:"data,omitempty"`
+            } `json:"course_info"` // 课程信息
+          } `json:"data,omitempty"`
+        } `json:"student_course"` // 学生选修的课程
+        TeacherInfo struct {
+          proto.CompBase
+          Data []struct {
+            TeacherInfo
+            TestNil struct {
+              proto.CompBase
+              Data string `json:"data,omitempty"`
+            } `json:"test_nil"` // 测试空返回
+          } `json:"data,omitempty"`
+        } `json:"teacher_info"` //教师信息
+      } `json:"data,omitempty"`
+    } `json:"student"`
+    TestError struct {
+      proto.CompBase
+      Data *TeacherInfo `json:"data,omitempty"`
+    } `json:"test_error"` // 测试 error 返回
+  }
+  
+  ret := RetInfo{}
+  
+  //下面操作有加别名
+  err := horm.NewQuery("student").Page(1, 10).FindAll().
+      AddSub(horm.NewQuery("student_course").FindAll(horm.Where{"@identify": "/student.identify"}).
+          AddSub(horm.NewQuery("course_info").Find(horm.Where{"@course": "../.course"})).
+          AddNext(horm.NewQuery("teacher_info").FindAll(horm.Where{"@teacher": "student_course/course_info.teacher"}).
+              AddSub(horm.NewQuery("redis_student(test_nil)").Get("not_exists")),
+          ),
+      ).
+      Next("teacher_info(test_error)").Find(horm.Where{"not_exist_field": 55}).
+      CompExec(ctx, &ret)
+  
+  ...
+}
+```
+
+生成的请求json如下：<br>
+
 ```json
 [
-  {
-    "name": "student",
-    "op": "find_all",
-    "size": 100,
-    "sub": [
-      {
-        "name": "student_course(sc)",
+    {
+        "name": "student",
         "op": "find_all",
-        "where": {
-          "@identify": "identify"
-        },
-        "size": 100
-      },
-      {
-        "name": "redis_student(rank)",
-        "op": "zrank",
-        "key": "student_score_rank",
-        "args": [
-          "@{identify}"
+        "page": 1,
+        "size": 10,
+        "sub": [
+            {
+                "name": "student_course",
+                "op": "find_all",
+                "where": {
+                    "@identify": "/student.identify"
+                },
+                "size": 100,
+                "sub": [
+                    {
+                        "name": "course_info",
+                        "op": "find",
+                        "where": {
+                            "@course": "../.course"
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "teacher_info",
+                "op": "find_all",
+                "where": {
+                    "@teacher": "student_course/course_info.teacher"
+                },
+                "size": 100,
+                "sub": [
+                    {
+                        "name": "redis_student(test_nil)",
+                        "op": "get",
+                        "key": "not_exists"
+                    }
+                ]
+            }
         ]
-      }
-    ]
-  },
-  {
-    "name": "course_info",
-    "op": "find_all",
-    "where": {
-      "@course": "/student/sc.course"
     },
-    "size": 100
-  }
+    {
+        "name": "teacher_info(test_error)",
+        "op": "find",
+        "where": {
+            "not_exist_field": 55
+        }
+    }
 ]
 ```
+
+返回结果如下:<br>
+
+```json
+{
+    "student": {
+        "detail": {
+            "total": 2,
+            "total_page": 1,
+            "page": 1,
+            "size": 10
+        },
+        "data": [
+            {
+                "id": 1,
+                "identify": 2024061211,
+                "gender": 1,
+                "age": 19,
+                "name": "caohao",
+                "score": 89.7,
+                "image": "SU1BR0UuUENH",
+                "article": "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+                "exam_time": "15:30:00",
+                "birthday": "1995-03-23T00:00:00+08:00",
+                "created_at": "2024-11-30T20:53:57+08:00",
+                "updated_at": "2024-12-12T19:30:37+08:00",
+                "student_course": {
+                    "data": [
+                        {
+                            "id": 1,
+                            "identify": 2024061211,
+                            "course": "Math",
+                            "hours": 54,
+                            "course_info": {
+                                "data": {
+                                    "course": "Math",
+                                    "teacher": "Simon",
+                                    "time": "11:00:00"
+                                }
+                            }
+                        },
+                        {
+                            "id": 2,
+                            "identify": 2024061211,
+                            "course": "Physics",
+                            "hours": 32,
+                            "course_info": {
+                                "data": {
+                                    "course": "Physics",
+                                    "teacher": "Richard",
+                                    "time": "14:00:00"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "teacher_info": {
+                    "data": [
+                        {
+                            "teacher": "Richard",
+                            "age": 57,
+                            "test_nil": {
+                                "is_nil": true
+                            }
+                        },
+                        {
+                            "teacher": "Simon",
+                            "age": 61,
+                            "test_nil": {
+                                "is_nil": true
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "id": 2,
+                "identify": 2024070733,
+                "gender": 1,
+                "age": 17,
+                "name": "jerry",
+                "score": 92.3,
+                "image": "SU1BR0UuUENH",
+                "article": "Design and analysis of algorithms and data structures",
+                "exam_time": "14:30:00",
+                "birthday": "1993-02-22T00:00:00+08:00",
+                "created_at": "2024-11-30T20:57:03+08:00",
+                "updated_at": "2024-12-12T20:41:00+08:00",
+                "student_course": {
+                    "data": [
+                        {
+                            "id": 3,
+                            "identify": 2024070733,
+                            "course": "English",
+                            "hours": 68,
+                            "course_info": {
+                                "data": {
+                                    "course": "English",
+                                    "teacher": "Dennis",
+                                    "time": "15:30:00"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "teacher_info": {
+                    "data": [
+                        {
+                            "teacher": "Dennis",
+                            "age": 39,
+                            "test_nil": {
+                                "is_nil": true
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "test_error": {
+        "error": {
+            "type": 2,
+            "code": 1054,
+            "msg": "mysql query error: [Unknown column 'not_exist_field' in 'where clause']"
+        }
+    }
+}
+```
+
 ## 返回结果
 ### IsNil
 当数据源为 mysql、clickhouse、es 等数据库时，如果 Find或者 FindAll 查询的数据为空时，返回参数 isNil=true， 否则，返回参数为 false，
