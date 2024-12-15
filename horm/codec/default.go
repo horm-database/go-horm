@@ -286,11 +286,11 @@ func (dc *defaultCodec) Decode(typ consts.RetType, src interface{}, dest []inter
 			return fmt.Errorf("decode page result to receiver failed: %v", err)
 		}
 		return nil
-	case *proto.ModResult:
+	case *proto.ModRet:
 		switch s := src.(type) {
-		case proto.ModResult:
+		case proto.ModRet:
 			*dest0 = s
-		case *proto.ModResult:
+		case *proto.ModRet:
 			*dest0 = *s
 		case []byte:
 			err = dc.um(s, dest0)

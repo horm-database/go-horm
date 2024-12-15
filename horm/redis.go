@@ -647,7 +647,6 @@ func (s *Query) ZScore(key string, member interface{}) *Query {
 // param: key string
 // param: member interface{} 成员，任意类型
 func (s *Query) ZRank(key string, member interface{}) *Query {
-
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZRANK")
 	s.setKey(key)

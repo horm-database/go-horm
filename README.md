@@ -164,8 +164,7 @@ type FieldSpec struct {
 为了访问数据统一接入服务，我们需要创建 Client 来与服务端建立连接，horm 提供了2种方式来指定 Query 语句使用的客户端。
 一、为Query语句指定特定的客户端。二、配置全局客户端，在未指定特定客户端的情况下，所有 Query 都采用该全局客户端。
 
-## 新建 horm client 连接
-### 指定客户端
+## 指定客户端
 我们首先通过 horm.NewClient 创建一个客户端，该函数的第一个参数是允许传入一个 caller name，
 他将读取配置文件 orm.yaml 里面的 server.caller.name 对应的数据统一接入服务 workspace_id、 encryption、token、target、appid、secret等信息，
 然后用 WithClient 为 Query 指定该 Client。
@@ -255,7 +254,7 @@ func queryByClientWithOption(ctx context.Context) {
 }
 ```
 
-### 配置全局Client
+## 配置全局Client
 配置全局变量之后，如果 Query 没有用 WithClient 指定客户端的话，就使用全局客户端
 ```go
 import (
@@ -280,6 +279,7 @@ func queryByGlobalClient(ctx context.Context) {
 
 # 执行模式
 ## 单执行单元
+### 单结果接收
 执行单条语句，`isNil`, `error` 直接通过 Exec 函数返回，当查询结果为空时，isNil=true，可以将 result 指针传入 Exec 第二个参数，接收返回结果。
 ```go
 import (
@@ -296,8 +296,14 @@ func queryModeSingle(ctx context.Context) {
 }
 ```
 
+### 多结果接收
 有时候，可能会返回多个结果，需要两个参数去接受结果，例如 redis 的 ZRangeByScore：
 ```go
+import (
+  ...
+  "github.com/horm-database/go-horm/horm"
+)
+
 func queryMultiReturn(ctx context.Context) {
   birthday, _ := time.Parse("2006-01-02", "1987-08-27")
   data := Student{
@@ -312,13 +318,11 @@ func queryMultiReturn(ctx context.Context) {
     Birthday: birthday,
   }
   
-  _, err := horm.NewQuery("redis_student").
-        ZAdd("student_age_rank", data, float64(data.Age)).Exec(ctx)
+  _, err := horm.NewQuery("redis_student").ZAdd("student_age_rank", data, float64(data.Age)).Exec(ctx)
   
   results := make([]*Student, 0)
   ages := make([]float64, 0)
-  _, err = horm.NewQuery("redis_student").
-        ZRangeByScore("student_age_rank", 10, 50, true).Exec(ctx, &results, &ages)
+  _, err = horm.NewQuery("redis_student").ZRangeByScore("student_age_rank", 10, 50, true).Exec(ctx, &results, &ages)
   
   ...
 }
@@ -328,8 +332,60 @@ func queryMultiReturn(ctx context.Context) {
 返回结果如下：
 ![image](https://github.com/horm-database/image/blob/master/4-1.png)
 
+### 分页返回
+当我们请求参数 page > 1 时，返回结果会以分页形式返回，接收数据有两种方式：
+```go
+import (
+	...
+	
+    "github.com/horm-database/common/proto"
+    "github.com/horm-database/go-horm/horm"
+)
+
+func queryPageReturn(ctx context.Context) {
+	pageInfo := proto.Detail{}
+	students := make([]*Student, 0)
+	
+	isNil, err := horm.NewQuery("student").FindAll().Page(1, 10).Exec(ctx, &pageInfo, &students)
+
+    ...
+}
+```
+
+实际上统一接入服务返回的分页数据结构如下：
+
+```go
+// PageResult 当 page > 1 时会返回分页结果
+type PageResult struct {
+	Detail *Detail       `orm:"detail,omitempty" json:"detail,omitempty"` // 查询细节信息
+	Data   []interface{} `orm:"data,omitempty" json:"data,omitempty"`     // 分页结果
+}
+
+// Detail 其他查询细节信息，例如 分页信息、滚动翻页信息、其他信息等。
+type Detail struct {
+	Total     uint64                 `orm:"total" json:"total"`                               // 总数
+	TotalPage uint32                 `orm:"total_page,omitempty" json:"total_page,omitempty"` // 总页数
+	Page      int                    `orm:"page,omitempty" json:"page,omitempty"`             // 当前分页
+	Size      int                    `orm:"size,omitempty" json:"size,omitempty"`             // 每页大小
+	Scroll    *Scroll                `orm:"scroll,omitempty" json:"scroll,omitempty"`         // 滚动翻页信息
+	Extras    map[string]interface{} `orm:"extras,omitempty" json:"extras,omitempty"`         // 更多详细信息
+}
+```
+
+所以我们也可以直接用如下方式去接收返回结果：
+
+```go
+func queryPageReturn2(ctx context.Context) {
+	result := proto.PageResult{}
+	isNil, err := horm.NewQuery("student").FindAll().Page(1, 10).Exec(ctx, &result)
+
+	...
+}
+
+```
 
 ## 并行执行
+### 并行执行多语句
 为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
 
 `注意：如果并行执行访问同一个数据时，为了区别，可以像下面一样在括号里面加别名：redis_student(zadd) 和 redis_student(range)。`<br><br>
@@ -373,7 +429,62 @@ func queryModeParallel(ctx context.Context) {
 
 ![image](https://github.com/horm-database/image/blob/master/4-2.png)
 
+### 引用
+当出现引用的时候，并行执行会退化为串行执行。引用有多种方式，如下，当 horm.Where 元素以 @ 开头的时候，表示 identify 的值
+来自 student 执行单元的返回结果中 identify 字段。`.` 之前的信息表示引用路径，之后的信息表示引用的字段 key，被引用的执行单元
+必须在引用的执行单元之前被执行，否则就会报错。
+
+```go
+import (
+	...
+	"github.com/horm-database/common/proto"
+	"github.com/horm-database/go-horm/horm"
+)
+
+func queryReference(ctx context.Context) {
+	var studentIsNil, courseIsNil bool
+	var studentErr, courseErr error
+	var page = proto.Detail{}
+	var students = make([]*Student, 0)
+	var studentCourse = make([]*StudentCourse, 0)
+
+	err := horm.NewQuery("student").FindAll().Page(1, 10).
+		WithReceiver(&studentIsNil, &studentErr, &page, &students).
+		Next("student_course").FindAll(horm.Where{"@identify": "student.identify"}).
+		WithReceiver(&courseIsNil, &courseErr, &studentCourse).
+		PExec(ctx)
+
+    ...
+}
+```
+
+当引用参数是 key (string) 或者 args ([]any) 而不是 horm.Where (map[string]any) 的时候，无法用 @identify 来表示 identify 的值
+引用自 student.identify，这时候需要 @{student.identify} 来表示该参数来自于引用 student.identify。 例如下面这个例子，我们需要先
+查询 name="caohao" 的学生，然后根据他的 identify 来获取他的排名：
+
+```go
+func queryReference2(ctx context.Context) {
+	var isNil bool
+	var studentErr, rankErr error
+	var student = Student{}
+	var rank int
+
+	err := horm.NewQuery("student").Find(horm.Where{"name": "caohao"}).
+		WithReceiver(&isNil, &studentErr, &student).
+		Next("redis_student").ZRank("student_score_rank", "@{student.identify}").
+		WithReceiver(nil, &rankErr, &rank).
+		PExec(ctx)
+
+	...
+}
+```
+
+当被引用的值不是一个 map，而是一个具体数值的时候，我们不需要 `.`，而是直接指定被引用的路径即可。 例如下面按理我们获取了一个学生的排名，
+我们 想知道该排名的奖励：
+
 ## 复合执行
+### 一个复杂的案例
+复合执行包含并行执行加上子查询，在复合查询的结果，如果是一个多条记录的数组，我们将为每个数组结果都执行一遍对应的子查询，
 ```go
 import (
 	...
@@ -384,25 +495,25 @@ import (
 func queryModeCompound(ctx context.Context) {
   type RetInfo struct {
     Student struct {
-      proto.CompBase // 返回基础信息
+      proto.RetBase // 返回基础信息
       Data []*struct {
         Student
         StudentCourse struct {
-          proto.CompBase
+          proto.RetBase
           Data []*struct {
             StudentCourse
             CourseInfo struct {
-              proto.CompBase
+              proto.RetBase
               Data *CourseInfo `json:"data,omitempty"`
             } `json:"course_info"` // 课程信息
           } `json:"data,omitempty"`
         } `json:"student_course"` // 学生选修的课程
         TeacherInfo struct {
-          proto.CompBase
+          proto.RetBase
           Data []struct {
             TeacherInfo
             TestNil struct {
-              proto.CompBase
+              proto.RetBase
               Data string `json:"data,omitempty"`
             } `json:"test_nil"` // 测试空返回
           } `json:"data,omitempty"`
@@ -410,7 +521,7 @@ func queryModeCompound(ctx context.Context) {
       } `json:"data,omitempty"`
     } `json:"student"`
     TestError struct {
-      proto.CompBase
+      proto.RetBase
       Data *TeacherInfo `json:"data,omitempty"`
     } `json:"test_error"` // 测试 error 返回
   }
@@ -613,6 +724,8 @@ func queryModeCompound(ctx context.Context) {
     }
 }
 ```
+
+### 引用
 
 ## 返回结果
 ### IsNil

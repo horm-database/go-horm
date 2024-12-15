@@ -6,7 +6,7 @@ import (
 )
 
 // IsAllSuccess 判断 es 批量插入是否全部成功
-func IsAllSuccess(results []*proto.ModResult) bool {
+func IsAllSuccess(results []*proto.ModRet) bool {
 	for _, ret := range results {
 		if ret.Status != 0 {
 			return false
