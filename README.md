@@ -277,6 +277,141 @@ func queryByGlobalClient(ctx context.Context) {
 
 ```
 
+# 执行单元（查询单元）
+我们在客户端通过 horm.NewQuery 来创建一个查询，每个查询语句需要指定一个名称，如下的 `horm.NewQuery("student(s)") 中的 student`，
+horm 会生成一个执行单元（查询单元），并发送到数据统一接入服务， 在数据统一接入服务通过 `数据名称` 找到对应的表/索引/redis 配置信息、
+及其数据库信息，然后根据协议将执行单元转化为对应数据库 sql语句、elastic 请求或 redis 请求，并将执行结果返回到客户端。
+```go
+import (
+	...
+	"github.com/horm-database/go-horm/horm"
+)
+
+func Test(ctx context.Context) {
+	var result = make([]*Students, 0)
+	err := horm.NewQuery("student(s)").FindAll().Exec(ctx, &result)
+	...
+}
+```
+
+一个完整的执行单元包含如下信息：
+```go
+// github.com/horm-database/common/proto
+
+package proto
+
+import (
+	"github.com/horm-database/common/consts"
+)
+
+// Unit 执行单元（查询单元）
+type Unit struct {
+	// query base info
+	Name  string   `json:"name,omitempty"`  // name
+	Op    string   `json:"op,omitempty"`    // operation
+	Shard []string `json:"shard,omitempty"` // 分片、分表、分库
+
+	// 结构化查询共有
+	Column []string               `json:"column,omitempty"` // columns
+	Where  map[string]interface{} `json:"where,omitempty"`  // query condition
+	Order  []string               `json:"order,omitempty"`  // order by
+	Page   int                    `json:"page,omitempty"`   // request pages. when page > 0, the request is returned in pagination.
+	Size   int                    `json:"size,omitempty"`   // size per page
+	From   uint64                 `json:"from,omitempty"`   // offset
+
+	// 数据更新
+	Data     map[string]interface{}     `json:"data,omitempty"`      // add/update one data
+	Datas    []map[string]interface{}   `json:"datas,omitempty"`     // batch add/update data
+	DataType map[string]consts.DataType `json:"data_type,omitempty"` // 数据类型（主要用于 clickhouse，对于数据类型有强依赖），请求 json 不区分 int8、int16、int32、int64 等，只有 Number 类型，bytes 也会被当成 string 处理。
+
+	// group by
+	Group  []string               `json:"group,omitempty"`  // group by
+	Having map[string]interface{} `json:"having,omitempty"` // group by condition
+
+	// for databases such as elastic ...
+	Type   string  `json:"type,omitempty"`   // type, such as elastic`s type, it can be customized before v7, and unified as _doc after v7
+	Scroll *Scroll `json:"scroll,omitempty"` // scroll info
+
+	// for databases such as redis ...
+	Prefix string        `json:"prefix,omitempty"` // prefix, It is strongly recommended to bring it to facilitate finer-grained summary statistics, otherwise the statistical granularity can only be cmd ，such as GET、SET、HGET ...
+	Key    string        `json:"key,omitempty"`    // key
+	Args   []interface{} `json:"args,omitempty"`   // args 参数的数据类型存于 data_type
+
+	// bytes 字节流
+	Bytes []byte `json:"bytes,omitempty"`
+
+	// params 与数据库特性相关的附加参数，例如 mysql 的join，redis 的 WITHSCORES，以及 elastic 的 refresh、collapse、runtime_mappings、track_total_hits 等等。
+	Params map[string]interface{} `json:"params,omitempty"`
+
+	// 直接送 Query 语句，需要拥有库的 表权限、或 root 权限。具体参数为 args
+	Query string `json:"query,omitempty"`
+
+	// Extend 扩展信息，作用于插件
+	Extend map[string]interface{} `json:"extend,omitempty"`
+
+	Sub   []*Unit `json:"sub,omitempty"`   // 子查询
+	Trans []*Unit `json:"trans,omitempty"` // 事务，该事务下的所有 Unit 必须同时成功或失败（注意：仅适合支持事务的数据库回滚，如果数据库不支持事务，则操作不会回滚）
+}
+
+// Scroll 滚动查询
+type Scroll struct {
+	ID   string `json:"id,omitempty"`   // 滚动 id
+	Info string `json:"info,omitempty"` // 滚动查询信息，如时间
+}
+```
+
+## 别名
+在并发执行、复合执行场景下，同一层级的多条语句如果访问同一张表，为了结果的正常，我们必须在括号里加上别名，
+如下代码的`horm.NewQuery("redis_student(zadd)")` 和 `Next("redis_student(range_by_score)")` ，我们都是访问 BDB 库 redis_student。
+```go
+func Test(ctx context.Context) {
+	student := Student{
+		Sex:    "male",
+		Age:    19,
+		Name:   "smallhowcao",
+		Status: 1,
+	}
+	
+	var err1, err2 error
+	ret := make([]*Student, 0)
+	scores := make([]float64, 0)
+	
+	//下面操作有加别名
+	err := horm.NewQuery("redis_student(zadd)").ZAdd("student_score_rank", student, 65).WithReceiver(&err1).
+		Next("redis_student(range_by_score)").ZRangeByScoreWithScore("student_score_rank", 70, 100).WithReceiver(&err2, &ret, &scores).
+		PExec(ctx)
+}
+```
+
+## 分片、分表、分库
+在统一接入服务，可以配置 4 种分表策略。
+* 0 - 无分表，直接返回服务端配置 table_name 。以及所属的数据库信息。
+* 1 - 取自客户端送的 shard 字段，通过 `Shard` 函数指定分表。
+```go
+func Test(ctx context.Context) {
+	result := make([]*Student, 0)
+	err := horm.NewQuery("student").Shard("student_61").FindAll().Exec(ctx, &result)
+}
+```
+如果是 es 获取多个索引的数据，我们可以用逗号分隔，例如：
+```go
+func Test(ctx context.Context) {
+	result := make([]*EsArticleLog, 0)
+	err := horm.NewQuery("es_article_log").Shard("es_article_log_202205,es_article_log_202206").
+			FindAll().Exec(ctx, &result)
+}
+```
+* 2 - 字段取模，table_name + "_" + shard % shard_num
+```go
+func Test(ctx context.Context) {
+	result := make([]*Student, 0)
+	err := horm.NewQuery("student").Shard(userID).FindAll().Exec(ctx, &result)
+}
+```
+
+* 3 - shard 函数，遇到上面都无法满足的特殊分表、分库需求，我们可以配置 shard func 模式，然后在服务端代码里面嵌入分表函数：
+
+
 # 执行模式
 ## 单执行单元
 ### 单结果接收
@@ -431,7 +566,7 @@ func queryModeParallel(ctx context.Context) {
 
 ### 引用
 当出现引用的时候，并行执行会退化为串行执行。引用有多种方式，如下，当 horm.Where 元素以 @ 开头的时候，表示 identify 的值
-来自 student 执行单元的返回结果中 identify 字段。`.` 之前的信息表示引用路径，之后的信息表示引用的字段 key，被引用的执行单元
+来自 student 执行单元的返回结果的 field: identify。`.` 之前的信息表示引用路径，之后的信息表示引用的字段 key，被引用的执行单元
 必须在引用的执行单元之前被执行，否则就会报错。
 
 ```go
@@ -458,9 +593,9 @@ func queryReference(ctx context.Context) {
 }
 ```
 
-当引用参数是 key (string) 或者 args ([]any) 而不是 horm.Where (map[string]any) 的时候，无法用 @identify 来表示 identify 的值
-引用自 student.identify，这时候需要 @{student.identify} 来表示该参数来自于引用 student.identify。 例如下面这个例子，我们需要先
-查询 name="caohao" 的学生，然后根据他的 identify 来获取他的排名：
+当引用参数是 key (string) 或者 args ([]interface{}) 而不是 horm.Where (map[string]interface{}) 的时候，无法用 @identify 来
+表示 identify 的值引用自 student.identify，这时候需要 @{student.identify} 来表示该参数来自于引用 student.identify。 例如下面
+这个例子，我们需要先查询 name="caohao" 的学生，然后根据他的 identify 来获取他的排名：
 
 ```go
 func queryReference2(ctx context.Context) {
@@ -479,8 +614,24 @@ func queryReference2(ctx context.Context) {
 }
 ```
 
-当被引用的值不是一个 map，而是一个具体数值的时候，我们不需要 `.`，而是直接指定被引用的路径即可。 例如下面按理我们获取了一个学生的排名，
-我们 想知道该排名的奖励：
+当被引用的值不是一个 map，而是一个具体数值的时候，我们不需要 `.` 来指定 field，而是直接采用被引用的执行单元即可。 例如下面我们获取了
+一个学生的排名， 我们期望在一个并行执行中知道该排名的奖励：
+```go
+func queryReference3(ctx context.Context) {
+	var isNil bool
+	var rankErr, rankRewardErr error
+	var rank int
+	var rankReward = ScoreRankReward{}
+
+	err := horm.NewQuery("redis_student(score_rank)").ZRank("student_score_rank", 2024061211).
+		WithReceiver(nil, &rankErr, &rank).
+		Next("score_rank_reward").Find(horm.Where{"@rank": "score_rank"}).
+		WithReceiver(&isNil, &rankRewardErr, &rankReward).
+		PExec(ctx)
+
+	...
+}
+```
 
 ## 复合执行
 ### 一个复杂的案例
@@ -725,7 +876,7 @@ func queryModeCompound(ctx context.Context) {
 }
 ```
 
-### 引用
+### 引用路径
 
 ## 返回结果
 ### IsNil
@@ -829,75 +980,6 @@ func Test(ctx context.Context) {
     }
 ]
 ```
-
-# 数据名称（执行单元名）
-每个执行语句都需要指定一个数据名称，也叫执行单元名，表明我需要访问哪个数据，如下的 `horm.NewQuery("student(senior)") 中的 student` ，我们在 DB Proxy 可以通过 `数据名称` 找到对应的表/索引/redis 配置信息、及其数据库信息，然后执行 sql 语句、elastic 请求或 redis 请求。
-```go
-package main
-import (
-	...
-	"github.com/horm-database/go-horm/horm"
-)
-
-...
-
-func Test(ctx context.Context) {
-	var result = make([]*Students, 0)
-	err := horm.NewQuery("student").FindAll().Exec(ctx, &result)
-	...
-}
-```
-
-## 别名
-在并发执行、复合执行场景下，同一层级的多条语句如果访问同一张表，为了结果的正常，我们最好在括号里加上别名，如下代码的`horm.NewQuery("skynet(zadd)")` 和 `Next("skynet(range_by_score)")` ，我们都是访问 BDB 库 skynet。
-```go
-func Test(ctx context.Context) {
-	student := Student{
-		Sex:    "male",
-		Age:    19,
-		Name:   "smallhowcao",
-		Status: 1,
-	}
-	
-	var err1, err2 error
-	ret := make([]*Student, 0)
-	scores := make([]float64, 0)
-	
-	//下面操作有加别名
-	err := horm.NewQuery("skynet(zadd)").ZAdd("student_score_rank", student, 65).WithReceiver(&err1).
-		Next("skynet(range_by_score)").ZRangeByScoreWithScore("student_score_rank", 70, 100).WithReceiver(&err2, &ret, &scores).
-		PExec(ctx)
-}
-```
-
-## 分片、分表、分库
-
-在 DB Proxy 服务端，可以配置 4 种分表策略。
-* 0 - 无分表，直接返回 DB Proxy 配置 table_name 。以及所属的数据库信息。
-* 1 - 取自客户端送的 shard 字段，通过 `Shard` 函数指定分表。
-```go
-func Test(ctx context.Context) {
-	result := make([]*Student, 0)
-	err := horm.NewQuery("student").Shard("student_61").FindAll().Exec(ctx, &result)
-}
-```
-如果是 es 获取多个索引的数据，我们可以用逗号分隔，例如：
-```go
-func Test(ctx context.Context) {
-	result := make([]*EsArticleLog, 0)
-	err := horm.NewQuery("es_article_log").Shard("es_article_log_202205,es_article_log_202206").
-			FindAll().Exec(ctx, &result)
-}
-```
-* 2 - 字段取模，table_name + "_" + shard % shard_num
-```go
-func Test(ctx context.Context) {
-	result := make([]*Student, 0)
-	err := horm.NewQuery("student").Shard(userID).FindAll().Exec(ctx, &result)
-}
-```
-
-* 3 - shard 函数，遇到上面都无法满足的特殊分表、分库需求，我们可以配置 shard func 模式，然后在 DB Proxy 服务端代码里面嵌入分表函数：
 
 
 # 查询语句
@@ -2355,7 +2437,7 @@ func Test(ctx context.Context) {
 ```go
 func Test(ctx context.Context) {
 	result := Student{}
-	err := horm.NewQuery("skynet").Prefix("student_").Get("13324").Exec(ctx, &result)
+	err := horm.NewQuery("redis_student").Prefix("student_").Get("13324").Exec(ctx, &result)
 	if horm.IsError(err) {
 		fmt.Println("find student error: %v", err)
 		return
@@ -2397,14 +2479,14 @@ func Test(ctx context.Context) {
 		Status:  1,
 	}
 
-	err := horm.NewQuery("skynet").Prefix("student_").Set("13324", data).Exec(ctx)
+	err := horm.NewQuery("redis_student").Prefix("student_").Set("13324", data).Exec(ctx)
 	if horm.IsError(err) {
 		fmt.Println("find student error: %v", err)
 		return
 	}
 
 	result := Student{}
-	err = horm.NewQuery("skynet").Prefix("student_").Get("13324").Exec(ctx, &result)
+	err = horm.NewQuery("redis_student").Prefix("student_").Get("13324").Exec(ctx, &result)
 	if horm.IsError(err) {
 		fmt.Println("find student error: %v", err)
 		return
@@ -2439,7 +2521,7 @@ Expire(key string, ttl int)
 ```
 使用示例：
 ```go
-err := horm.NewQuery("skynet").Expire("student_13324", 3600).Exec(ctx)
+err := horm.NewQuery("redis_student").Expire("student_13324", 3600).Exec(ctx)
 ```
 - `TTL`
   函数用法：
@@ -2451,7 +2533,7 @@ TTL(key string)
 使用示例：
 ```go
 var ttl int // 当 key 不存在时，返回 -2 。 当 key 存在但没有设置剩余生存时间时，返回 -1 。 否则，以秒为单位，返回 key 的剩余生存时间。
-err := horm.NewQuery("skynet").TTL("student_13324").Exec(ctx, &ttl)
+err := horm.NewQuery("redis_student").TTL("student_13324").Exec(ctx, &ttl)
 ```
 - `EXISTS`
   函数用法：
@@ -2463,7 +2545,7 @@ Exists(key string)
 使用示例：
 ```go
 var exists bool // 存在返回true，否则返回false
-err := horm.NewQuery("skynet").Exists("student_13324").Exec(ctx, &exists)
+err := horm.NewQuery("redis_student").Exists("student_13324").Exec(ctx, &exists)
 ```
 - `DEL`
   函数用法：
@@ -2475,7 +2557,7 @@ Del(key string)
 使用示例：
 ```go
 var affectNum int // 被删除 key 的数量。
-err := horm.NewQuery("skynet").Del("student_13324").Exec(ctx, &affectNum)
+err := horm.NewQuery("redis_student").Del("student_13324").Exec(ctx, &affectNum)
 ```
 ## 字符串
 - `SET`
@@ -2498,11 +2580,11 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("skynet").Set("test_bool", true).Exec(ctx)
-err = horm.NewQuery("skynet").Set("test_int", 78).Exec(ctx)
-err = horm.NewQuery("skynet").Set("test_float", 63.2567).Exec(ctx)
-err = horm.NewQuery("skynet").Set("test_string", "i am ok").Exec(ctx)
-err = horm.NewQuery("skynet").Set("test_struct", data).Exec(ctx)
+err := horm.NewQuery("redis_student").Set("test_bool", true).Exec(ctx)
+err = horm.NewQuery("redis_student").Set("test_int", 78).Exec(ctx)
+err = horm.NewQuery("redis_student").Set("test_float", 63.2567).Exec(ctx)
+err = horm.NewQuery("redis_student").Set("test_string", "i am ok").Exec(ctx)
+err = horm.NewQuery("redis_student").Set("test_struct", data).Exec(ctx)
 ```
 - `SETEX`
   函数用法：
@@ -2524,11 +2606,11 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("skynet").SetEX("test_bool", true, 3600).Exec(ctx)
-err = horm.NewQuery("skynet").SetEX("test_int", 78, 3600).Exec(ctx)
-err = horm.NewQuery("skynet").SetEX("test_float", 63.2567, 3600).Exec(ctx)
-err = horm.NewQuery("skynet").SetEX("test_string", "i am ok", 86400).Exec(ctx)
-err = horm.NewQuery("skynet").SetEX("test_struct", data, 86400).Exec(ctx)
+err := horm.NewQuery("redis_student").SetEX("test_bool", true, 3600).Exec(ctx)
+err = horm.NewQuery("redis_student").SetEX("test_int", 78, 3600).Exec(ctx)
+err = horm.NewQuery("redis_student").SetEX("test_float", 63.2567, 3600).Exec(ctx)
+err = horm.NewQuery("redis_student").SetEX("test_string", "i am ok", 86400).Exec(ctx)
+err = horm.NewQuery("redis_student").SetEX("test_struct", data, 86400).Exec(ctx)
 ```
 - `SETNX`
   函数用法：
@@ -2551,7 +2633,7 @@ data := Student{
 }
 
 var success bool // 设置成功，返回true 。设置失败，返回false
-err := horm.NewQuery("skynet").SetNX("test_struct", data).Exec(ctx, &success)
+err := horm.NewQuery("redis_student").SetNX("test_struct", data).Exec(ctx, &success)
 ```
 - `GET`
   函数用法：
@@ -2563,7 +2645,7 @@ Get(key string)
 使用示例：
 ```go
 var bval bool
-err := horm.NewQuery("skynet").Get("test_bool").Exec(ctx, &bval)
+err := horm.NewQuery("redis_student").Get("test_bool").Exec(ctx, &bval)
 	
 if horm.IsError(err) {
 	return err
@@ -2574,16 +2656,16 @@ if horm.IsNil(err) { // err = nil returned
 }
 
 var ival int
-err = horm.NewQuery("skynet").Get("test_int").Exec(ctx, &ival)
+err = horm.NewQuery("redis_student").Get("test_int").Exec(ctx, &ival)
 
 var fval float64
-err = horm.NewQuery("skynet").Get("test_float").Exec(ctx, &fval)
+err = horm.NewQuery("redis_student").Get("test_float").Exec(ctx, &fval)
 
 var strval string
-err = horm.NewQuery("skynet").Get("test_string").Exec(ctx, &strval)
+err = horm.NewQuery("redis_student").Get("test_string").Exec(ctx, &strval)
 
 var structVal Student
-err = horm.NewQuery("skynet").Get("test_struct").Exec(ctx, &structVal)
+err = horm.NewQuery("redis_student").Get("test_struct").Exec(ctx, &structVal)
 ```
 - `GETSET`
   函数用法：
@@ -2605,7 +2687,7 @@ data := Student{
 }
 
 var lastSet Student
-err := horm.NewQuery("skynet").GetSet("test_struct", data).Exec(ctx, &lastSet)
+err := horm.NewQuery("redis_student").GetSet("test_struct", data).Exec(ctx, &lastSet)
 
 if horm.IsError(err) {
 	return err
@@ -2625,7 +2707,7 @@ Incr(key string)
 使用示例：
 ```go
 var ret int
-err := horm.NewQuery("skynet").Incr("test_int").Exec(ctx, &ret)
+err := horm.NewQuery("redis_student").Incr("test_int").Exec(ctx, &ret)
 ```
 - `DECR`
   函数用法：
@@ -2637,7 +2719,7 @@ Decr(key string)
 使用示例：
 ```go
 var ret int
-err := horm.NewQuery("skynet").Decr("test_int").Exec(ctx, &ret)
+err := horm.NewQuery("redis_student").Decr("test_int").Exec(ctx, &ret)
 ```
 - `INCRBY`
   函数用法：
@@ -2650,7 +2732,7 @@ IncrBy(key string, n int)
 使用示例：
 ```go
 var ret int
-err := horm.NewQuery("skynet").IncrBy("test_int", 15).Exec(ctx, &ret)
+err := horm.NewQuery("redis_student").IncrBy("test_int", 15).Exec(ctx, &ret)
 ```
 - `MSET`
   函数用法：
@@ -2668,7 +2750,7 @@ mdata := map[string]interface{}{
 	"c": 25,
 }
 
-err := horm.NewQuery("skynet").Prefix("user_age_").MSet(mdata).Exec(ctx)
+err := horm.NewQuery("redis_student").Prefix("user_age_").MSet(mdata).Exec(ctx)
 ```
 结果：
 ```bash
@@ -2691,7 +2773,7 @@ MGet(keys []string)
 ```go
 var result []int
 keys := []string{"a", "b", "c"}
-err := horm.NewQuery("skynet").Prefix("user_age_").MGet(keys).Exec(ctx, &result)
+err := horm.NewQuery("redis_student").Prefix("user_age_").MGet(keys).Exec(ctx, &result)
 ```
 
 - `SETBIT`
@@ -2745,7 +2827,7 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("skynet").HSet("student", "13324", data).Exec(ctx)
+err := horm.NewQuery("redis_student").HSet("student", "13324", data).Exec(ctx)
 ```
 - `HSETNX`
   函数用法：
@@ -2760,7 +2842,7 @@ HSetNx(key string, filed interface{}, value interface{})
 使用示例：
 ```go
 var success bool // 设置成功，返回true 。 如果给定字段已经存在且没有操作被执行，返回 false。
-err := horm.NewQuery("skynet").HSetNx("student_age", 13324, 22).Exec(ctx, &success)
+err := horm.NewQuery("redis_student").HSetNx("student_age", 13324, 22).Exec(ctx, &success)
 ```
 - `HMSET`
   函数用法：
@@ -2780,7 +2862,7 @@ data := map[string]interface{}{
 	"name":     "smallhow",
 }
 
-err := horm.NewQuery("skynet").Prefix("student_").HmSet("13324", data).Exec(ctx)
+err := horm.NewQuery("redis_student").Prefix("student_").HmSet("13324", data).Exec(ctx)
 ```
 结果：
 ```bash
@@ -2814,7 +2896,7 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("skynet").Prefix("student_").HmSetStruct("19827", data).Exec(ctx)
+err := horm.NewQuery("redis_student").Prefix("student_").HmSetStruct("19827", data).Exec(ctx)
 ```
 结果：
 ```bash
@@ -2842,10 +2924,10 @@ HmGet(key string, fields []string)
 fields := []string{"userid", "class_id", "sex", "age", "name"}
 
 var result Student //可以通过一个 struct 指针接收结果
-err := horm.NewQuery("skynet").HmGet("student_19827", fields).Exec(ctx, &result)
+err := horm.NewQuery("redis_student").HmGet("student_19827", fields).Exec(ctx, &result)
 
 var result map[string]interface{} //也可以通过一个 map 接收结果
-err := horm.NewQuery("skynet").HmGet("student_19827", fields).Exec(ctx, &result)
+err := horm.NewQuery("redis_student").HmGet("student_19827", fields).Exec(ctx, &result)
 ```
 - `HGET`
   函数用法：
@@ -2858,7 +2940,7 @@ func (s *Statement) HGet(key string, field interface{})
 使用示例：
 HSet 的类型是什么，HGet 也用相同类型的指针去接收结果。
 ```go
-err = horm.NewQuery("skynet").HGet("test_hset", "xxxxxx").Exec(ctx, &bval)
+err = horm.NewQuery("redis_student").HGet("test_hset", "xxxxxx").Exec(ctx, &bval)
 if horm.IsError(err) {
 	return err
 }
@@ -2867,10 +2949,10 @@ if horm.IsNil(err) { // err = nil returned
 	fmt.Println("key not set")
 }
 
-err = horm.NewQuery("skynet").HGet("test_hset", "aa").Exec(ctx, &ival)
-err = horm.NewQuery("skynet").HGet("test_hset", "bb").Exec(ctx, &fval)
-err = horm.NewQuery("skynet").HGet("test_hset", "cc").Exec(ctx, &strval)
-err = horm.NewQuery("skynet").HGet("test_hset", "ee").Exec(ctx, &structVal)
+err = horm.NewQuery("redis_student").HGet("test_hset", "aa").Exec(ctx, &ival)
+err = horm.NewQuery("redis_student").HGet("test_hset", "bb").Exec(ctx, &fval)
+err = horm.NewQuery("redis_student").HGet("test_hset", "cc").Exec(ctx, &strval)
+err = horm.NewQuery("redis_student").HGet("test_hset", "ee").Exec(ctx, &structVal)
 ```
 - `HGETALL`
   函数用法：
@@ -2882,10 +2964,10 @@ func (s *Statement) HGetAll(key string)
 使用示例：
 ```go
 var result Student //可以通过一个 struct 指针接收结果
-err := horm.NewQuery("skynet").HGETALL("student_19827", fields).Exec(ctx, &result)
+err := horm.NewQuery("redis_student").HGETALL("student_19827", fields).Exec(ctx, &result)
 
 var result map[string]interface{} //也可以通过一个 map 接收结果
-err := horm.NewQuery("skynet").HGETALL("student_19827", fields).Exec(ctx, &result)
+err := horm.NewQuery("redis_student").HGETALL("student_19827", fields).Exec(ctx, &result)
 ```
 - `HKEYS`
   函数用法：
@@ -2897,7 +2979,7 @@ Hkeys(key string)
 使用示例：
 ```go
 var result []string
-err := horm.NewQuery("skynet").Hkeys("student_19827").Exec(ctx, &result)
+err := horm.NewQuery("redis_student").Hkeys("student_19827").Exec(ctx, &result)
 ```
 
 - `HINCRBY`
@@ -2912,7 +2994,7 @@ HIncrBy(key string, field string, v int)
 使用示例：
 ```go
 var newAge int
-err := horm.NewQuery("skynet").HIncrBy("student_19827", "age", 5).Exec(ctx, &newAge)
+err := horm.NewQuery("redis_student").HIncrBy("student_19827", "age", 5).Exec(ctx, &newAge)
 ```
 - `HDEL`
   函数用法：
@@ -2924,7 +3006,7 @@ HDel(key string, field ...interface{})
 使用示例：
 ```go
 var delNum int
-err := horm.NewQuery("skynet").HDel("student", 19827, 23312, 98322).Exec(ctx, &delNum)
+err := horm.NewQuery("redis_student").HDel("student", 19827, 23312, 98322).Exec(ctx, &delNum)
 ```
 - `HEXISTS`
   函数用法：
@@ -2937,7 +3019,7 @@ HExists(key string, field string)
 使用示例：
 ```go
 var exist bool // field 是否存在，存在
-err := horm.NewQuery("skynet").HExists("student", 19827).Exec(ctx, &exist)
+err := horm.NewQuery("redis_student").HExists("student", 19827).Exec(ctx, &exist)
 ```
 - `HLEN`
   函数用法：
@@ -2949,7 +3031,7 @@ HLen(key string)
 使用示例：
 ```go
 var num int
-err := horm.NewQuery("skynet").HLen("student").Exec(ctx, &num)
+err := horm.NewQuery("redis_student").HLen("student").Exec(ctx, &num)
 ```
 - `HSTRLEN`
   函数用法：
@@ -2962,7 +3044,7 @@ HStrLen(key string, field interface{})
 使用示例：
 ```go
 var l int
-err := horm.NewQuery("skynet").HStrLen("student_19827", "name").Exec(ctx, &l)
+err := horm.NewQuery("redis_student").HStrLen("student_19827", "name").Exec(ctx, &l)
 ```
 - `HINCRBYFLOAT`
   函数用法：
@@ -2976,7 +3058,7 @@ HIncrByFloat(key string, field string, v float64)
 使用示例：
 ```go
 var score float64
-err := horm.NewQuery("skynet").HIncrByFloat("student_19827", "score", 0.7).Exec(ctx, &score)
+err := horm.NewQuery("redis_student").HIncrByFloat("student_19827", "score", 0.7).Exec(ctx, &score)
 ```
 - `HVALS`
   函数用法：
@@ -2988,7 +3070,7 @@ HVals(key string)
 使用示例：
 ```go
 var ages []int
-err := horm.NewQuery("skynet").HVals("student_age").Exec(ctx, &ages)
+err := horm.NewQuery("redis_student").HVals("student_age").Exec(ctx, &ages)
 ```
 ## 列表
 - `LPUSH`
@@ -3011,7 +3093,7 @@ data := Student{
 }
 
 var n int // 执行 LPUSH 命令后，列表的长度。
-err := horm.NewQuery("skynet").LPush("student_list", data).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").LPush("student_list", data).Exec(ctx, &n)
 ```
 - `RPUSH`
   函数用法：
@@ -3033,7 +3115,7 @@ data := Student{
 }
 
 var n int // 执行 RPUSH 命令后，列表的长度。
-err := horm.NewQuery("skynet").RPush("student_list", data).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").RPush("student_list", data).Exec(ctx, &n)
 ```
 - `LPOP`
   函数用法：
@@ -3045,7 +3127,7 @@ LPop(key string)
 使用示例：
 ```go
 var result Student //用于接收返回的任意类型指针
-err := horm.NewQuery("skynet").LPop("student_list").Exec(ctx, &result)
+err := horm.NewQuery("redis_student").LPop("student_list").Exec(ctx, &result)
 ```
 - `RPOP`
   函数用法：
@@ -3057,7 +3139,7 @@ RPop(key string)
 使用示例：
 ```go
 var result Student //用于接收返回的任意类型指针
-err := horm.NewQuery("skynet").RPop("student_list").Exec(ctx, &result)
+err := horm.NewQuery("redis_student").RPop("student_list").Exec(ctx, &result)
 ```
 
 - `LLEN`
@@ -3070,7 +3152,7 @@ LLen(key string)
 使用示例：
 ```go
 var n int
-err := horm.NewQuery("skynet").LLen("student_list").Exec(ctx, &n)
+err := horm.NewQuery("redis_student").LLen("student_list").Exec(ctx, &n)
 ```
 
 ## 集合
@@ -3094,7 +3176,7 @@ data := Student{
 }
 
 var n int //被添加到集合中的新元素的数量，不包括被忽略的元素。
-err := horm.NewQuery("skynet").SAdd("student_set", data).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").SAdd("student_set", data).Exec(ctx, &n)
 ```
 - `SMEMBERS`
   函数用法：
@@ -3106,7 +3188,7 @@ SMembers(key string)
 使用示例：
 ```go
 var result []*Student
-err := horm.NewQuery("skynet").SMembers("student_set").Exec(ctx, &result)
+err := horm.NewQuery("redis_student").SMembers("student_set").Exec(ctx, &result)
 ```
 - `SREM`
   函数用法：
@@ -3119,7 +3201,7 @@ SRem(key string, members ...interface{})
 使用示例：
 ```go
 var n int // 被成功移除的元素的数量，不包括被忽略的元素。
-err := horm.NewQuery("skynet").SRem("student_set", data).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").SRem("student_set", data).Exec(ctx, &n)
 ```
 - `SCARD`
   函数用法：
@@ -3131,7 +3213,7 @@ SCard(key string)
 使用示例：
 ```go
 var n int // 被成功移除的元素的数量，不包括被忽略的元素。
-err := horm.NewQuery("skynet").SCard("student_set").Exec(ctx, &n)
+err := horm.NewQuery("redis_student").SCard("student_set").Exec(ctx, &n)
 ```
 - `SISMEMBER`
   函数用法：
@@ -3153,7 +3235,7 @@ data := Student{
 }
 
 var isMember bool
-err := horm.NewQuery("skynet").SIsMember("student_set", data).Exec(ctx, &isMember)
+err := horm.NewQuery("redis_student").SIsMember("student_set", data).Exec(ctx, &isMember)
 ```
 - `SRANDMEMBER`
   函数用法：
@@ -3169,7 +3251,7 @@ SRandMember(key string, count int)
 使用示例：
 ```go
 var result []*Student
-err := horm.NewQuery("skynet").SRandMember("student_set", 2).Exec(ctx, &result)
+err := horm.NewQuery("redis_student").SRandMember("student_set", 2).Exec(ctx, &result)
 ```
 - `SPOP`
   函数用法：
@@ -3182,7 +3264,7 @@ SPop(key string, count int)
 使用示例：
 ```go
 var result []*Student
-err := horm.NewQuery("skynet").SPop("student_set", 2).Exec(ctx, &result)
+err := horm.NewQuery("redis_student").SPop("student_set", 2).Exec(ctx, &result)
 ```
 - `SMOVE`
   函数用法：
@@ -3204,7 +3286,7 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("skynet").SMOVE("student_set", "student_set2", &data).Exec(ctx)
+err := horm.NewQuery("redis_student").SMOVE("student_set", "student_set2", &data).Exec(ctx)
 ```
 ## 有序集
 - `ZADD`
@@ -3239,7 +3321,7 @@ data2 := Student{
 }
 
 var n int // 被成功添加的新成员的数量，不包括那些被更新的、已经存在的成员。
-err := horm.NewQuery("skynet").ZAdd("student_zset", &data1, 97, &data2, 89).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").ZAdd("student_zset", &data1, 97, &data2, 89).Exec(ctx, &n)
 ```
 - `ZREM`
   函数用法：
@@ -3261,7 +3343,7 @@ data := Student{
 }
 
 var n int // 被成功移除的成员的数量，不包括被忽略的成员。
-err := horm.NewQuery("skynet").ZRem("student_zset", &data).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").ZRem("student_zset", &data).Exec(ctx, &n)
 ```
 - `ZREMRANGEBYSCORE`
   函数用法：
@@ -3274,7 +3356,7 @@ ZRemRangeByScore(key string, min, max interface{})
 使用示例：
 ```go
 var n int // 被移除成员的数量。
-err := horm.NewQuery("skynet").ZRemRangeByScore("student_zset", 90, 100).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").ZRemRangeByScore("student_zset", 90, 100).Exec(ctx, &n)
 ```
 - `ZREMRANGEBYRANK`
   函数用法：
@@ -3287,7 +3369,7 @@ ZRemRangeByRank(key string, start, stop int)
 使用示例：
 ```go
 var n int // 被移除成员的数量。
-err := horm.NewQuery("skynet").ZRemRangeByRank("student_zset", 0, 2).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").ZRemRangeByRank("student_zset", 0, 2).Exec(ctx, &n)
 ```
 - `ZCARD`
   函数用法：
@@ -3299,7 +3381,7 @@ ZCard(key string)
 使用示例：
 ```go
 var n int
-err := horm.NewQuery("skynet").ZCard("student_zset").Exec(ctx, &n)
+err := horm.NewQuery("redis_student").ZCard("student_zset").Exec(ctx, &n)
 ```
 - `ZSCORE`
   函数用法：
@@ -3321,7 +3403,7 @@ data := Student{
 }
 
 var score float64
-err := horm.NewQuery("skynet").ZScore("student_zset", &data).Exec(ctx, &score)
+err := horm.NewQuery("redis_student").ZScore("student_zset", &data).Exec(ctx, &score)
 ```
 - `ZRANK`
   函数用法：
@@ -3343,7 +3425,7 @@ data := Student{
 }
 
 var rank int
-err := horm.NewQuery("skynet").ZRank("student_zset", &data).Exec(ctx, &rank)
+err := horm.NewQuery("redis_student").ZRank("student_zset", &data).Exec(ctx, &rank)
 ```
 - `ZREVRANK`
   函数用法：
@@ -3365,7 +3447,7 @@ data := Student{
 }
 
 var rank int
-err := horm.NewQuery("skynet").ZRevRank("student_zset", &data).Exec(ctx, &rank)
+err := horm.NewQuery("redis_student").ZRevRank("student_zset", &data).Exec(ctx, &rank)
 ```
 - `ZCOUNT`
   函数用法：
@@ -3379,7 +3461,7 @@ ZCount(key string, min, max interface{})
 使用示例：
 ```go
 var n int
-err := horm.NewQuery("skynet").ZCount("student_zset", 70, 80).Exec(ctx, &n)
+err := horm.NewQuery("redis_student").ZCount("student_zset", 70, 80).Exec(ctx, &n)
 ```
 - `ZPOPMIN`
   函数用法：
@@ -3394,7 +3476,7 @@ ZPopMin(key string, count ...int64)
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("skynet").ZPopMin("student_zset", 2).Exec(ctx, &result, scores)
+err = horm.NewQuery("redis_student").ZPopMin("student_zset", 2).Exec(ctx, &result, scores)
 ```
 - `ZPOPMAX`
   函数用法：
@@ -3409,7 +3491,7 @@ ZPopMax(key string, count ...int64)
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("skynet").ZPopMax("student_zset", 2).Exec(ctx, &result, &scores)
+err = horm.NewQuery("redis_student").ZPopMax("student_zset", 2).Exec(ctx, &result, &scores)
 ```
 - `ZINCRBY`
   函数用法：
@@ -3427,7 +3509,7 @@ ZIncrBy(key string, member, incr interface{})
 使用示例：
 ```go
 var newScore float64 // member 成员的新分数值。
-err = horm.NewQuery("skynet").ZIncrBy("student_zset", &data, 9.5).Exec(ctx, &newScore)
+err = horm.NewQuery("redis_student").ZIncrBy("student_zset", &data, 9.5).Exec(ctx, &newScore)
 ```
 - `ZRANGE`
   函数用法：
@@ -3441,7 +3523,7 @@ ZRange(key string, start, stop int)
 使用示例：
 ```go
 var result []*Student
-err = horm.NewQuery("skynet").ZRange("student_zset", 0, 9).Exec(ctx, &result)
+err = horm.NewQuery("redis_student").ZRange("student_zset", 0, 9).Exec(ctx, &result)
 ```
 - `ZRANGE WITHSCORES`
   函数用法：
@@ -3456,7 +3538,7 @@ ZRangeWithScore(key string, start, stop int)
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("skynet").ZRangeWithScore("student_zset", 0, 9).Exec(ctx, &result, &scores)
+err = horm.NewQuery("redis_student").ZRangeWithScore("student_zset", 0, 9).Exec(ctx, &result, &scores)
 ```
 返回结果：
 
@@ -3471,7 +3553,7 @@ ZRangeByScore(key string, min, max interface{})
 使用示例：
 ```go
 var result []*Student // 80分~90分之间
-err = horm.NewQuery("skynet").ZRangeByScore("student_zset", 80, 90).Exec(ctx, &result)
+err = horm.NewQuery("redis_student").ZRangeByScore("student_zset", 80, 90).Exec(ctx, &result)
 ```
 - `ZRangeByScoreWithLimit`
   函数用法：
@@ -3485,7 +3567,7 @@ ZRangeByScoreWithLimit(key string, min, max interface{}, offset, count int64)
 使用示例：
 ```go
 var result []*Student // 80分~90分之间，OFFSET=0，LIMIT=10
-err = horm.NewQuery("skynet").ZRangeByScoreWithLimit("student_zset", 80, 90, 0, 10).Exec(ctx, &result)
+err = horm.NewQuery("redis_student").ZRangeByScoreWithLimit("student_zset", 80, 90, 0, 10).Exec(ctx, &result)
 ```
 - `ZRangeByScoreWithScoreWithLimit`
   函数用法：
@@ -3500,7 +3582,7 @@ ZRangeByScoreWithScoreWithLimit(key string, min, max interface{}, offset, count 
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("skynet").ZRangeByScoreWithScoreWithLimit("student_zset", 70, 100, 0, 10).Exec(ctx, &result, &scores)
+err = horm.NewQuery("redis_student").ZRangeByScoreWithScoreWithLimit("student_zset", 70, 100, 0, 10).Exec(ctx, &result, &scores)
 ```
 返回结果：
 
@@ -3516,7 +3598,7 @@ ZRangeByScoreWithScore(key string, min, max interface{})
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("skynet").ZRangeByScoreWithScore("student_zset", 70, 100).Exec(ctx, &result, &scores)
+err = horm.NewQuery("redis_student").ZRangeByScoreWithScore("student_zset", 70, 100).Exec(ctx, &result, &scores)
 ```
 - `ZREVRANGE`
   函数用法：
@@ -3530,7 +3612,7 @@ ZRevRange(key string, start, stop int)
 使用示例：
 ```go
 var result []*Student
-err = horm.NewQuery("skynet").ZRevRange("student_zset", 0, 9).Exec(ctx, &result)
+err = horm.NewQuery("redis_student").ZRevRange("student_zset", 0, 9).Exec(ctx, &result)
 ```
 - `ZREVRANGE WITHSCORES`
   函数用法：
@@ -3545,7 +3627,7 @@ ZRevRangeWithScore(key string, start, stop int)
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("skynet").ZRevRangeWithScore("student_zset", 0, 9).Exec(ctx, &result, &scores)
+err = horm.NewQuery("redis_student").ZRevRangeWithScore("student_zset", 0, 9).Exec(ctx, &result, &scores)
 ```
 返回结果：
 - `ZREVRANGEBYSCORE`
@@ -3559,7 +3641,7 @@ ZRevRangeByScore(key string, min, max interface{})
 使用示例：
 ```go
 var result []*Student // 80分~90分之间
-err = horm.NewQuery("skynet").ZRevRangeByScore("student_zset", 80, 90).Exec(ctx, &result)
+err = horm.NewQuery("redis_student").ZRevRangeByScore("student_zset", 80, 90).Exec(ctx, &result)
 ```
 - `ZRevRangeByScoreWithLimit`
   函数用法：
@@ -3573,7 +3655,7 @@ ZRevRangeByScoreWithLimit(key string, min, max interface{}, offset, count int64)
 使用示例：
 ```go
 var result []*Student // 80分~90分之间，OFFSET=0，LIMIT=10
-err = horm.NewQuery("skynet").ZRevRangeByScoreWithLimit("student_zset", 80, 90, 0, 10).Exec(ctx, &result)
+err = horm.NewQuery("redis_student").ZRevRangeByScoreWithLimit("student_zset", 80, 90, 0, 10).Exec(ctx, &result)
 ```
 - `ZRevRangeByScoreWithScoreWithLimit`
   函数用法：
@@ -3588,7 +3670,7 @@ ZRevRangeByScoreWithScoreWithLimit(key string, min, max interface{}, offset, cou
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("skynet").ZRevRangeByScoreWithScoreWithLimit("student_zset", 70, 100, 0, 10).Exec(ctx, &result, &scores)
+err = horm.NewQuery("redis_student").ZRevRangeByScoreWithScoreWithLimit("student_zset", 70, 100, 0, 10).Exec(ctx, &result, &scores)
 ```
 
 返回结果：
@@ -3606,5 +3688,5 @@ ZRevRangeByScoreWithScore(key string, min, max interface{})
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("skynet").ZRevRangeByScoreWithScore("student_zset", 70, 100).Exec(ctx, &result, &scores)
+err = horm.NewQuery("redis_student").ZRevRangeByScoreWithScore("student_zset", 70, 100).Exec(ctx, &result, &scores)
 ```
