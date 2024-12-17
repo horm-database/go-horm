@@ -277,10 +277,11 @@ func queryByGlobalClient(ctx context.Context) {
 
 ```
 
-# 执行单元（查询单元）
-我们在客户端通过 horm.NewQuery 来创建一个查询，每个查询语句需要指定一个名称，如下的 `horm.NewQuery("student(s)") 中的 student`，
-horm 会生成一个执行单元（查询单元），并发送到数据统一接入服务， 在数据统一接入服务通过 `数据名称` 找到对应的表/索引/redis 配置信息、
+# 查询单元（执行单元）
+我们在客户端通过 horm.NewQuery 来创建一个查询，每个查询语句需要指定一个名称，如下的 `horm.NewQuery("student") 中的 student`，
+horm 会生成一个执行单元（查询单元），并发送到数据统一接入服务， 在数据统一接入服务通过 `数据名称` 找到对应的表/es索引/redis 配置信息、
 及其数据库信息，然后根据协议将执行单元转化为对应数据库 sql语句、elastic 请求或 redis 请求，并将执行结果返回到客户端。
+
 ```go
 import (
 	...
@@ -289,7 +290,7 @@ import (
 
 func Test(ctx context.Context) {
 	var result = make([]*Students, 0)
-	err := horm.NewQuery("student(s)").FindAll().Exec(ctx, &result)
+	err := horm.NewQuery("student").FindAll().Exec(ctx, &result)
 	...
 }
 ```
@@ -304,7 +305,7 @@ import (
 	"github.com/horm-database/common/consts"
 )
 
-// Unit 执行单元（查询单元）
+// Unit 查询单元（执行单元）
 type Unit struct {
 	// query base info
 	Name  string   `json:"name,omitempty"`  // name
@@ -361,27 +362,77 @@ type Scroll struct {
 ```
 
 ## 别名
-在并发执行、复合执行场景下，同一层级的多条语句如果访问同一张表，为了结果的正常，我们必须在括号里加上别名，
-如下代码的`horm.NewQuery("redis_student(zadd)")` 和 `Next("redis_student(range_by_score)")` ，我们都是访问 BDB 库 redis_student。
+如果我们用到 mysql 的别名，或者在并发查询、复合查询模式下、同一层级的多个查询单元如果访问同一张表，为了结果的正常，我们必须在括号里加上别名，
+如下代码的`horm.NewQuery("redis_student(zadd)")` 和 `Next("redis_student(range_by_score)")` ，我们都是访问 redis_student。
 ```go
-func Test(ctx context.Context) {
-	student := Student{
-		Sex:    "male",
-		Age:    19,
-		Name:   "smallhowcao",
-		Status: 1,
+import (
+    ...
+    "github.com/horm-database/go-horm/horm"
+)
+
+func queryAlias(ctx context.Context) {
+	data := Student{
+		Identify: 2024080313,
+		Gender:   2,
+		Age:      23,
+		Name:     "kitty",
+		Score:    91.5,
+		Image:    []byte("IMAGE.PCG"),
+		Article:  "Artificial Intelligence",
+		ExamTime: "15:30:00",
 	}
-	
-	var err1, err2 error
-	ret := make([]*Student, 0)
-	scores := make([]float64, 0)
-	
+
+	var isNil bool
+	var zaddErr, rangeErr error
+	students := make([]*Student, 0)
+	ages := make([]float64, 0)
+
 	//下面操作有加别名
-	err := horm.NewQuery("redis_student(zadd)").ZAdd("student_score_rank", student, 65).WithReceiver(&err1).
-		Next("redis_student(range_by_score)").ZRangeByScoreWithScore("student_score_rank", 70, 100).WithReceiver(&err2, &ret, &scores).
+	err := horm.NewQuery("redis_student(zadd)").
+		ZAdd("student_age_rank", &data, float64(data.Age)).WithReceiver(nil, &zaddErr).
+		Next("redis_student(range)").
+		ZRangeByScore("student_age_rank", 10, 50, true).WithReceiver(&isNil, &rangeErr, &students, &ages).
 		PExec(ctx)
+
+	...
+}
+
+```
+
+以下是上面请求的返回结果，是一个 map[string]interface，其中 map 的 key 就是执行单元的名称或别名，如果都用 redist_student，则无法区分是返回
+是哪个执行单元的结果，而且会丢失一个执行单元的结果，这时候需要用别名来区别。
+```json
+{
+    "zadd": 1,
+    "range": {
+        "member": [
+            "{\"score\":91.5,\"birthday\":\"0001-01-01T00:00:00Z\",\"name\":\"kitty\",\"article\":\"Artificial Intelligence\",\"exam_time\":\"15:30:00\",\"updated_at\":\"2024-12-17T20:49:17.568859+08:00\",\"id\":227169198692904961,\"age\":23,\"created_at\":\"2024-12-17T20:49:17.568853+08:00\",\"gender\":2,\"identify\":2024080313,\"image\":\"SU1BR0UuUENH\"}"
+        ],
+        "score": [
+            23
+        ]
+    }
 }
 ```
+
+另外一种情况就是作为 mysql 的别名存在
+```go
+func queryAlias2(ctx context.Context) {
+	var result = []map[string]interface{}{}
+	_, err := horm.NewQuery("student_course(sc)").Column("sc.*", "s.name").FindAll().
+		LeftJoin("student(s)", horm.On{"identify": "identify"}).
+		Exec(ctx, &result)
+
+	...
+}
+```
+
+上面的代码生成的 sql 语句如下：
+```sql
+SELECT  `sc`.* , `s`.`name`  FROM `student_course` AS `sc` 
+	LEFT JOIN `student` AS `s` ON `sc`.`identify`=`s`.`identify`
+```
+
 
 ## 分片、分表、分库
 在统一接入服务，可以配置 4 种分表策略。
@@ -412,8 +463,8 @@ func Test(ctx context.Context) {
 * 3 - shard 函数，遇到上面都无法满足的特殊分表、分库需求，我们可以配置 shard func 模式，然后在服务端代码里面嵌入分表函数：
 
 
-# 执行模式
-## 单执行单元
+# 查询模式
+## 单查询单元
 ### 单结果接收
 执行单条语句，`isNil`, `error` 直接通过 Exec 函数返回，当查询结果为空时，isNil=true，可以将 result 指针传入 Exec 第二个参数，接收返回结果。
 ```go
@@ -435,33 +486,34 @@ func queryModeSingle(ctx context.Context) {
 有时候，可能会返回多个结果，需要两个参数去接受结果，例如 redis 的 ZRangeByScore：
 ```go
 import (
-  ...
-  "github.com/horm-database/go-horm/horm"
+    ...
+    "github.com/horm-database/go-horm/horm"
 )
 
 func queryMultiReturn(ctx context.Context) {
-  birthday, _ := time.Parse("2006-01-02", "1987-08-27")
-  data := Student{
-    Identify: 2024080313,
-    Gender:   2,
-    Age:      23,
-    Name:     "kitty",
-    Score:    91.5,
-    Image:    []byte("IMAGE.PCG"),
-    Article:  "Artificial Intelligence",
-    ExamTime: "15:30:00",
-    Birthday: birthday,
-  }
-  
-  _, err := horm.NewQuery("redis_student").ZAdd("student_age_rank", data, float64(data.Age)).Exec(ctx)
-  
-  results := make([]*Student, 0)
-  ages := make([]float64, 0)
-  _, err = horm.NewQuery("redis_student").ZRangeByScore("student_age_rank", 10, 50, true).Exec(ctx, &results, &ages)
-  
-  ...
-}
+	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+	data := Student{
+		Identify: 2024080313,
+		Gender:   2,
+		Age:      23,
+		Name:     "kitty",
+		Score:    91.5,
+		Image:    []byte("IMAGE.PCG"),
+		Article:  "Artificial Intelligence",
+		ExamTime: "15:30:00",
+		Birthday: birthday,
+	}
 
+	_, err := horm.NewQuery("redis_student").
+		ZAdd("student_age_rank", data, float64(data.Age)).Exec(ctx)
+
+	results := make([]*Student, 0)
+	ages := make([]float64, 0)
+	_, err = horm.NewQuery("redis_student").
+		ZRangeByScore("student_age_rank", 10, 50, true).Exec(ctx, &results, &ages)
+
+	...
+}
 ```
 
 返回结果如下：
@@ -471,8 +523,7 @@ func queryMultiReturn(ctx context.Context) {
 当我们请求参数 page > 1 时，返回结果会以分页形式返回，接收数据有两种方式：
 ```go
 import (
-	...
-	
+    ...
     "github.com/horm-database/common/proto"
     "github.com/horm-database/go-horm/horm"
 )
@@ -480,10 +531,11 @@ import (
 func queryPageReturn(ctx context.Context) {
 	pageInfo := proto.Detail{}
 	students := make([]*Student, 0)
-	
-	isNil, err := horm.NewQuery("student").FindAll().Page(1, 10).Exec(ctx, &pageInfo, &students)
 
-    ...
+	isNil, err := horm.NewQuery("student").
+		FindAll().Page(1, 10).Exec(ctx, &pageInfo, &students)
+
+	...
 }
 ```
 
@@ -519,8 +571,8 @@ func queryPageReturn2(ctx context.Context) {
 
 ```
 
-## 并行执行
-### 并行执行多语句
+## 并行查询
+### 并发无先后
 为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
 
 `注意：如果并行执行访问同一个数据时，为了区别，可以像下面一样在括号里面加别名：redis_student(zadd) 和 redis_student(range)。`<br><br>
@@ -564,10 +616,10 @@ func queryModeParallel(ctx context.Context) {
 
 ![image](https://github.com/horm-database/image/blob/master/4-2.png)
 
-### 引用
-当出现引用的时候，并行执行会退化为串行执行。引用有多种方式，如下，当 horm.Where 元素以 @ 开头的时候，表示 identify 的值
-来自 student 执行单元的返回结果的 field: identify。`.` 之前的信息表示引用路径，之后的信息表示引用的字段 key，被引用的执行单元
-必须在引用的执行单元之前被执行，否则就会报错。
+### 引用（同层级）
+引用是指的一个查询单元的请求参数来自另外一个查询的返回结果，当出现引用的时候，并行执行会退化为串行执行。引用有多种方式，
+如下 horm.Where{"@identify": "student.identify"} 中 map 的 key 以`@`开头的时候，表示 identify 的值引用自 student 执行单元
+的返回结果的 identify 字段。`.` 之前表示引用路径，之后表示引用的 field， 被引用的执行单元必须在引用的执行单元之前被执行，否则就会报错。
 
 ```go
 import (
@@ -593,9 +645,9 @@ func queryReference(ctx context.Context) {
 }
 ```
 
-当引用参数是 key (string) 或者 args ([]interface{}) 而不是 horm.Where (map[string]interface{}) 的时候，无法用 @identify 来
-表示 identify 的值引用自 student.identify，这时候需要 @{student.identify} 来表示该参数来自于引用 student.identify。 例如下面
-这个例子，我们需要先查询 name="caohao" 的学生，然后根据他的 identify 来获取他的排名：
+当引用参数是 key (string) 或者 args ([]interface{}) 而不是 horm.Where (map[string]interface{}) 的时候， 
+需要 `@{}` 方式，例如 @{student.identify} 来表示该参数来自于引用 student.identify。 例如下面这个例子，
+我们需要先查询 name="caohao" 的学生，然后根据学生的 identify 来获取他的排名：
 
 ```go
 func queryReference2(ctx context.Context) {
@@ -615,7 +667,7 @@ func queryReference2(ctx context.Context) {
 ```
 
 当被引用的值不是一个 map，而是一个具体数值的时候，我们不需要 `.` 来指定 field，而是直接采用被引用的执行单元即可。 例如下面我们获取了
-一个学生的排名， 我们期望在一个并行执行中知道该排名的奖励：
+一个学生的排名， 我们期望在一个并行执行单元中知道该排名的奖励：
 ```go
 func queryReference3(ctx context.Context) {
 	var isNil bool
@@ -633,9 +685,30 @@ func queryReference3(ctx context.Context) {
 }
 ```
 
-## 复合执行
-### 一个复杂的案例
-复合执行包含并行执行加上子查询，在复合查询的结果，如果是一个多条记录的数组，我们将为每个数组结果都执行一遍对应的子查询，
+## 复合查询
+### 返回结构
+复合执行包含并行执行加上子查询，在复合查询的结果，如果返回的是一个数组，我们会为每个数组结果都执行一遍该查询的子查询，每个复合查询的结果
+都包含 error、is_nil、detail 和 data 4个参数，当 error 不存在或者等于 nil 的时候，则结果正常无报错，分页等详情再 detail 中，
+如果返回数据为空则 is_nil=true，当 is_nil 不存在，或者等于 false 时，返回数据存在于 data 中。子查询也在父查询的返回 data 中。
+
+```go
+package proto // "github.com/horm-database/common/proto"
+
+// CompResult 混合查询返回结果
+type CompResult struct {
+	RetBase             // 返回基础信息
+	Data    interface{} `json:"data"` // 返回数据
+}
+
+// RetBase 混合查询返回结果基础信息
+type RetBase struct {
+	Error  *Error  `json:"error,omitempty"`  // 错误返回
+	IsNil  bool    `json:"is_nil,omitempty"` // 是否为空
+	Detail *Detail `json:"detail,omitempty"` // 查询细节信息
+}
+```
+
+下面是一个复杂的例子：
 ```go
 import (
 	...
@@ -748,7 +821,7 @@ func queryModeCompound(ctx context.Context) {
 ]
 ```
 
-返回结果如下:<br>
+返回结果如下，整个返回结果会 json.Unmarshal 到接收结构体，即上面的 RetInfo 结构体:<br>
 
 ```json
 {
@@ -877,6 +950,11 @@ func queryModeCompound(ctx context.Context) {
 ```
 
 ### 引用路径
+不同于并行查询的所有查询单元都在同一个层级，在复合查询中，有了子查询，在不同层级的情况下，引用会变得复杂，我们可以采用相对路径和绝对路径，
+来指向我们需要被引用的查询单元。 如果 `/` 开头，则表是该路径属于绝对路径，例如上面实例中的 `/student.identify`，否则，就是相对路径，
+相对路径在计算的时候，会把当前层级所在的父查询的绝对路径加在相对路径前，例如上面案例的 `student_course/course_info.teacher` ，
+会变成 `/student/student_course/course_info.teacher`如果以 `../` 开头的相对路径，则会把`../` 转化为父查询的绝对路径，
+例如上面案例的 `../.course`，会变成 `/student/student_course.course`，在相对路径转化为绝对路径之后，再根据规则获取指定路径的引用结果。
 
 ## 返回结果
 ### IsNil

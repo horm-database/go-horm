@@ -1,0 +1,90 @@
+package horm
+
+import (
+	"reflect"
+
+	"github.com/horm-database/common/errs"
+	"github.com/horm-database/common/proto/sql"
+	"github.com/horm-database/common/types"
+)
+
+// Join 表 join 语句
+func (s *Query) Join(table string, relation ...interface{}) *Query {
+	return s.realJoin(table, "", relation...)
+}
+
+// LeftJoin Left JOIN 表 left join 语句
+func (s *Query) LeftJoin(table string, relation ...interface{}) *Query {
+	return s.realJoin(table, "LEFT", relation...)
+}
+
+// RightJoin Right JOIN 表 right join 语句
+func (s *Query) RightJoin(table string, relation ...interface{}) *Query {
+	return s.realJoin(table, "RIGHT", relation...)
+}
+
+// InnerJoin Inner JOIN 表 inner join 语句
+func (s *Query) InnerJoin(table string, relation ...interface{}) *Query {
+	return s.realJoin(table, "INNER", relation...)
+}
+
+// FullJoin Full JOIN 表 full join 语句
+func (s *Query) FullJoin(table string, relation ...interface{}) *Query {
+	return s.realJoin(table, "FULL", relation...)
+}
+
+func (s *Query) realJoin(table string, joinType string, relation ...interface{}) *Query {
+	join := sql.Join{
+		Type:  joinType,
+		Table: table,
+	}
+
+	if s.Unit.Params == nil {
+		s.Unit.Params = map[string]interface{}{"join": []*sql.Join{&join}}
+	} else {
+		tmp, ok := s.Unit.Params["join"]
+		if !ok {
+			s.Unit.Params["join"] = []*sql.Join{&join}
+		} else {
+			joins, ok := tmp.([]*sql.Join)
+			if !ok {
+				s.Error = errs.Newf(errs.RetParamInvalid, "join`s type must be []*sql.Join")
+				return s
+			}
+
+			joins = append(joins, &join)
+			s.Unit.Params["join"] = joins
+		}
+	}
+
+	if len(relation) > 0 {
+		rela := relation[0]
+		v := reflect.ValueOf(rela)
+		if v.Kind() == reflect.String {
+			join.Using = []string{rela.(string)}
+		} else if types.IsArray(v) {
+			switch relations := rela.(type) {
+			case Using:
+				join.Using = relations
+			case []string:
+				join.Using = relations
+			default:
+				s.Error = errs.Newf(errs.RetParamInvalid, "the third param`s type must be []string if it is array")
+				return s
+			}
+		} else if v.Kind() == reflect.Map {
+			switch relations := rela.(type) {
+			case On:
+				join.On = relations
+			case map[string]string:
+				join.On = relations
+			default:
+				s.Error = errs.Newf(errs.RetParamInvalid, "the third param`s type must be map[string]string if it is map")
+				return s
+			}
+		}
+
+	}
+
+	return s
+}
