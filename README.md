@@ -295,6 +295,7 @@ func Test(ctx context.Context) {
 }
 ```
 
+## 查询单元结构体
 一个完整的执行单元包含如下信息：
 ```go
 // github.com/horm-database/common/proto
@@ -465,6 +466,7 @@ func Test(ctx context.Context) {
 
 # 查询模式
 ## 单查询单元
+整个查询仅包含一个执行单元
 ### 单结果接收
 执行单条语句，`isNil`, `error` 直接通过 Exec 函数返回，当查询结果为空时，isNil=true，可以将 result 指针传入 Exec 第二个参数，接收返回结果。
 ```go
@@ -572,7 +574,7 @@ func queryPageReturn2(ctx context.Context) {
 ```
 
 ## 并行查询
-### 并发无先后
+### 并发同时执行
 为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
 
 `注意：如果并行执行访问同一个数据时，为了区别，可以像下面一样在括号里面加别名：redis_student(zadd) 和 redis_student(range)。`<br><br>

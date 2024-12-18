@@ -39,24 +39,6 @@ func (s *Query) realJoin(table string, joinType string, relation ...interface{})
 		Table: table,
 	}
 
-	if s.Unit.Params == nil {
-		s.Unit.Params = map[string]interface{}{"join": []*sql.Join{&join}}
-	} else {
-		tmp, ok := s.Unit.Params["join"]
-		if !ok {
-			s.Unit.Params["join"] = []*sql.Join{&join}
-		} else {
-			joins, ok := tmp.([]*sql.Join)
-			if !ok {
-				s.Error = errs.Newf(errs.RetParamInvalid, "join`s type must be []*sql.Join")
-				return s
-			}
-
-			joins = append(joins, &join)
-			s.Unit.Params["join"] = joins
-		}
-	}
-
 	if len(relation) > 0 {
 		rela := relation[0]
 		v := reflect.ValueOf(rela)
@@ -83,8 +65,9 @@ func (s *Query) realJoin(table string, joinType string, relation ...interface{})
 				return s
 			}
 		}
-
 	}
+
+	s.Unit.Join = append(s.Unit.Join, &join)
 
 	return s
 }
