@@ -279,7 +279,7 @@ func queryByGlobalClient(ctx context.Context) {
 
 # 查询单元（执行单元）
 我们在客户端通过 horm.NewQuery 来创建一个查询，每个查询语句需要指定一个名称，如下的 `horm.NewQuery("student") 中的 student`，
-horm 会生成一个执行单元（查询单元），并发送到数据统一接入服务， 在数据统一接入服务通过 `数据名称` 找到对应的表/es索引/redis 配置信息、
+horm 会生成一个执行单元（查询单元），并发送到数据统一接入服务， 在数据统一接入服务通过 `数据名称` 找到对应的mysql表/es索引/redis配置信息、
 及其数据库信息，然后根据协议将执行单元转化为对应数据库 sql语句、elastic 请求或 redis 请求，并将执行结果返回到客户端。
 
 ```go
@@ -457,33 +457,21 @@ SELECT  `sc`.* , `s`.`name`  FROM `student_course` AS `sc`
 ```
 
 ## 分片、分表、分库
-在统一接入服务，可以配置 4 种分表策略。
-* 0 - 无分表，直接返回服务端配置 table_name 。以及所属的数据库信息。
-* 1 - 取自客户端送的 shard 字段，通过 `Shard` 函数指定分表。
+默认情况下，我们的表名就等于数据名，但是，如果有mysql分表、elastic分索引、redis分库的情况，我们需要用到 shard 功能来指定分表，
+如下案例我们 student 表，根据 identify % 100 分了100张分表。
 ```go
-func Test(ctx context.Context) {
-	result := make([]*Student, 0)
-	err := horm.NewQuery("student").Shard("student_61").FindAll().Exec(ctx, &result)
-}
-```
-如果是 es 获取多个索引的数据，我们可以用逗号分隔，例如：
-```go
-func Test(ctx context.Context) {
-	result := make([]*EsArticleLog, 0)
-	err := horm.NewQuery("es_article_log").Shard("es_article_log_202205",es_article_log_202206").
-			FindAll().Exec(ctx, &result)
-}
-```
-* 2 - 字段取模，table_name + "_" + shard % shard_num
-```go
-func Test(ctx context.Context) {
-	result := make([]*Student, 0)
-	err := horm.NewQuery("student").Shard(userID).FindAll().Exec(ctx, &result)
+func queryShard(ctx context.Context) {
+	var student = Student{}
+
+	_, err := horm.NewQuery("student").
+		Shard("student_33").Find(horm.Where{"identify": 2024070733}).Exec(ctx, &student)
+
+	...
 }
 ```
 
-* 3 - shard 函数，遇到上面都无法满足的特殊分表、分库需求，我们可以配置 shard func 模式，然后在服务端代码里面嵌入分表函数：
-
+在统一接入服务，我们会校验 shard 表是否符合该数据的表校验规则，表校验规则支持单一表名、逗号分隔的多个表名、正则表达式 regex/student_*?/、
+还有就是比较常用 `...` 校验， 例如咱们例子中的student_0...99 表示 从 student_0 一直到 student_99。
 
 # 查询模式
 ## 单查询单元
