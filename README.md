@@ -33,7 +33,7 @@ const ( // 后端服务支持的数据库类型
 建表语句：
 ```sql
 CREATE TABLE `student` (
-    `id` int NOT NULL AUTO_INCREMENT,
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
     `identify` bigint NOT NULL COMMENT '学生编号',
     `gender` tinyint NOT NULL DEFAULT '1' COMMENT '1-male 2-female',
     `age` int unsigned NOT NULL DEFAULT '0' COMMENT '年龄',
@@ -299,7 +299,6 @@ func Test(ctx context.Context) {
 一个完整的执行单元包含如下信息：
 ```go
 // github.com/horm-database/common/proto
-
 package proto
 
 import (
@@ -330,6 +329,9 @@ type Unit struct {
 	Group  []string               `json:"group,omitempty"`  // group by
 	Having map[string]interface{} `json:"having,omitempty"` // group by condition
 
+	// for databases such as mysql ...
+	Join []*Join `json:"join,omitempty"`
+
 	// for databases such as elastic ...
 	Type   string  `json:"type,omitempty"`   // type, such as elastic`s type, it can be customized before v7, and unified as _doc after v7
 	Scroll *Scroll `json:"scroll,omitempty"` // scroll info
@@ -342,7 +344,7 @@ type Unit struct {
 	// bytes 字节流
 	Bytes []byte `json:"bytes,omitempty"`
 
-	// params 与数据库特性相关的附加参数，例如 mysql 的join，redis 的 WITHSCORES，以及 elastic 的 refresh、collapse、runtime_mappings、track_total_hits 等等。
+	// params 与数据库特性相关的附加参数，例如 redis 的 WITHSCORES，以及 elastic 的 refresh、collapse、runtime_mappings、track_total_hits 等等。
 	Params map[string]interface{} `json:"params,omitempty"`
 
 	// 直接送 Query 语句，需要拥有库的 表权限、或 root 权限。具体参数为 args
@@ -360,18 +362,28 @@ type Scroll struct {
 	ID   string `json:"id,omitempty"`   // 滚动 id
 	Info string `json:"info,omitempty"` // 滚动查询信息，如时间
 }
+
+type Join struct {
+	Type  string            `json:"type,omitempty"`
+	Table string            `json:"table,omitempty"`
+	Using []string          `json:"using,omitempty"`
+	On    map[string]string `json:"on,omitempty"`
+}
 ```
 
 ## 别名
 如果我们用到 mysql 的别名，或者在并发查询、复合查询模式下、同一层级的多个查询单元如果访问同一张表，为了结果的正常，我们必须在括号里加上别名，
-如下代码的`horm.NewQuery("redis_student(zadd)")` 和 `Next("redis_student(range_by_score)")` ，我们都是访问 redis_student。
+如下代码的`horm.NewQuery("student(add)")` 和 `Next("student(find_all)")` ，我们都是访问 redis_student。
 ```go
 import (
     ...
+    "github.com/horm-database/common/proto"
     "github.com/horm-database/go-horm/horm"
 )
 
 func queryAlias(ctx context.Context) {
+	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+
 	data := Student{
 		Identify: 2024080313,
 		Gender:   2,
@@ -381,38 +393,48 @@ func queryAlias(ctx context.Context) {
 		Image:    []byte("IMAGE.PCG"),
 		Article:  "Artificial Intelligence",
 		ExamTime: "15:30:00",
+		Birthday: birthday,
 	}
 
 	var isNil bool
-	var zaddErr, rangeErr error
-	students := make([]*Student, 0)
-	ages := make([]float64, 0)
+	var addErr, findErr error
+	var addRet = proto.ModRet{}
+	var student = Student{}
 
 	//下面操作有加别名
-	err := horm.NewQuery("redis_student(zadd)").
-		ZAdd("student_age_rank", &data, float64(data.Age)).WithReceiver(nil, &zaddErr).
-		Next("redis_student(range)").
-		ZRangeByScore("student_age_rank", 10, 50, true).WithReceiver(&isNil, &rangeErr, &students, &ages).
+	err := horm.NewQuery("student(add)").
+		Insert(&data).WithReceiver(nil, &addErr, &addRet).
+		Next("student(find)").
+		Find(horm.Where{"@id": "add.id"}).WithReceiver(&isNil, &findErr, &student).
 		PExec(ctx)
 
 	...
 }
-
 ```
 
-以下是上面请求的返回结果，是一个 map[string]interface，其中 map 的 key 就是执行单元的名称或别名，如果都用 redist_student，则无法区分是返回
+以下是上面请求的返回结果，是一个 map[string]interface，其中 map 的 key 就是执行单元的名称或别名，如果都用 student，则无法区分是返回
 是哪个执行单元的结果，而且会丢失一个执行单元的结果，这时候需要用别名来区别。
+
 ```json
 {
-    "zadd": 1,
-    "range": {
-        "member": [
-            "{\"score\":91.5,\"birthday\":\"0001-01-01T00:00:00Z\",\"name\":\"kitty\",\"article\":\"Artificial Intelligence\",\"exam_time\":\"15:30:00\",\"updated_at\":\"2024-12-17T20:49:17.568859+08:00\",\"id\":227169198692904961,\"age\":23,\"created_at\":\"2024-12-17T20:49:17.568853+08:00\",\"gender\":2,\"identify\":2024080313,\"image\":\"SU1BR0UuUENH\"}"
-        ],
-        "score": [
-            23
-        ]
-    }
+  "add": {
+    "id": "227759629650636801",
+    "rows_affected": 1
+  },
+  "find": {
+    "id": 227759629650636801,
+    "name": "kitty",
+    "article": "Artificial Intelligence",
+    "created_at": "2024-12-19T11:55:27+08:00",
+    "birthday": "1987-08-27T00:00:00+09:00",
+    "updated_at": "2024-12-19T11:55:27+08:00",
+    "identify": 2024080313,
+    "gender": 2,
+    "age": 23,
+    "score": 91.5,
+    "image": "SU1BR0UuUENH",
+    "exam_time": "15:30:00"
+  }
 }
 ```
 
@@ -434,7 +456,6 @@ SELECT  `sc`.* , `s`.`name`  FROM `student_course` AS `sc`
 	LEFT JOIN `student` AS `s` ON `sc`.`identify`=`s`.`identify`
 ```
 
-
 ## 分片、分表、分库
 在统一接入服务，可以配置 4 种分表策略。
 * 0 - 无分表，直接返回服务端配置 table_name 。以及所属的数据库信息。
@@ -449,7 +470,7 @@ func Test(ctx context.Context) {
 ```go
 func Test(ctx context.Context) {
 	result := make([]*EsArticleLog, 0)
-	err := horm.NewQuery("es_article_log").Shard("es_article_log_202205,es_article_log_202206").
+	err := horm.NewQuery("es_article_log").Shard("es_article_log_202205",es_article_log_202206").
 			FindAll().Exec(ctx, &result)
 }
 ```
