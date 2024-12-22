@@ -43,7 +43,7 @@ func (s *Query) Name(name string) *Query {
 	s.Unit.Name = name
 	unitName, alias := util.Alias(name)
 	if unitName == "" {
-		s.Error = errs.Newf(errs.RetClientUnitNameEmpty, "unit name is empty")
+		s.Error = errs.Newf(errs.ErrReqUnitNameEmpty, "unit name is empty")
 	}
 
 	if alias != "" {
@@ -101,7 +101,7 @@ func (s *Query) Update(data interface{}, where ...Where) *Query {
 	v := reflect.Indirect(reflect.ValueOf(data))
 
 	if v.Kind() != reflect.Struct {
-		s.Error = errs.New(errs.RetClientParamTypeInvalid, "Update first param`s type must be struct/Map")
+		s.Error = errs.New(errs.ErrReqParamInvalid, "Update first param`s type must be struct/Map")
 		return s
 	}
 
@@ -347,7 +347,7 @@ func (s *Query) setData(typ codec.EncodeType, data interface{}) *Query {
 		}
 	}
 
-	s.Error = errs.Newf(errs.RetClientParamTypeInvalid, "%s param`s type must be struct/[]struct/Map/[]Map", op)
+	s.Error = errs.Newf(errs.ErrReqParamInvalid, "%s param`s type must be struct/[]struct/Map/[]Map", op)
 	return s
 }
 

@@ -16,7 +16,7 @@ func (s *Query) Eq(key string, value interface{}, kvs ...interface{}) *Query {
 
 	if len(kvs) > 0 {
 		if len(kvs)%2 != 0 {
-			s.Error = errs.Newf(errs.RetParamInvalid, "more input must be a key-value pair")
+			s.Error = errs.Newf(errs.ErrReqParamInvalid, "more input must be a key-value pair")
 			return s
 		}
 
@@ -26,7 +26,7 @@ func (s *Query) Eq(key string, value interface{}, kvs ...interface{}) *Query {
 			if k%2 == 0 { // this is key
 				key, ok = tmp.(string)
 				if !ok {
-					s.Error = errs.Newf(errs.RetParamInvalid, "more input key must be string")
+					s.Error = errs.Newf(errs.ErrReqParamInvalid, "more input key must be string")
 					return s
 				}
 			} else { // this is value
@@ -178,7 +178,7 @@ func (s *Query) UpdateKV(key string, value interface{}, kvs ...interface{}) *Que
 	s.Unit.Data[key] = value
 
 	if len(kvs)%2 != 0 {
-		s.Error = errs.New(errs.RetClientParamInvalid, "UpdateKV pairs params must be even number")
+		s.Error = errs.New(errs.ErrReqParamInvalid, "UpdateKV pairs params must be even number")
 		return s
 	}
 
@@ -188,7 +188,7 @@ func (s *Query) UpdateKV(key string, value interface{}, kvs ...interface{}) *Que
 			if i%2 == 0 {
 				key, isStr = v.(string)
 				if !isStr {
-					s.Error = errs.New(errs.RetClientParamInvalid, "UpdateKV pairs params the first must be string")
+					s.Error = errs.New(errs.ErrReqParamInvalid, "UpdateKV pairs params the first must be string")
 					return s
 				}
 			} else {

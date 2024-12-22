@@ -263,12 +263,12 @@ func (s *Query) HmSet(key string, v interface{}) *Query {
 	// struct/map 转化为 redis HMSET 的 field/value 对
 	fieldValues, err := s.GetCoder().Encode(codec.EncodeTypeHmSET, v)
 	if err != nil {
-		s.Error = errs.Newf(errs.RetClientEncodeFail, "redis extend encode error: %v", err)
+		s.Error = errs.Newf(errs.ErrClientEncode, "redis extend encode error: %v", err)
 		return s
 	}
 
 	if fieldValues == nil {
-		s.Error = errs.Newf(errs.RetClientEncodeFail, "redis extend encode value is nil")
+		s.Error = errs.Newf(errs.ErrClientEncode, "redis extend encode value is nil")
 		return s
 	}
 
@@ -570,7 +570,7 @@ func (s *Query) ZAdd(key string, args ...interface{}) *Query {
 	s.setKey(key)
 
 	if len(args) < 2 || len(args)%2 != 0 {
-		s.Error = errs.Newf(errs.RetClientParamInvalid, "ZADD args should contain pair of memhber and score")
+		s.Error = errs.Newf(errs.ErrReqParamInvalid, "ZADD args should contain pair of memhber and score")
 		return s
 	}
 

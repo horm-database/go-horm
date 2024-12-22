@@ -69,7 +69,7 @@ func (o *cli) Exec(ctx context.Context, q *Query, retReceiver ...interface{}) (i
 
 	err = q.GetCoder().Decode(q.ResultType, result, retReceiver)
 	if err != nil {
-		return false, errs.Newf(errs.RetClientDecodeFail, "[request_id=%d] %v, result=[%s]",
+		return false, errs.Newf(errs.ErrClientDecode, "[request_id=%d] %v, result=[%s]",
 			q.RequestID, err, types.InterfaceToString(result))
 	}
 
@@ -86,7 +86,7 @@ func (o *cli) PExec(ctx context.Context, q *Query) error {
 	rspData := map[string]interface{}{}
 	err = json.Api.Unmarshal(result, &rspData)
 	if err != nil {
-		return errs.Newf(errs.RetClientDecodeFail, "[request_id=%d] "+
+		return errs.Newf(errs.ErrClientDecode, "[request_id=%d] "+
 			"result decode to ret receiver error: %v, resp=[%s]", q.RequestID, err, string(result))
 	}
 
@@ -101,7 +101,7 @@ func (o *cli) PExec(ctx context.Context, q *Query) error {
 			if ok && rspErr != nil && rspErr.Code != 0 {
 				if query.RespError != nil {
 					*query.RespError = &errs.Error{
-						Type: int8(rspErr.Type),
+						Type: errs.EType(rspErr.Type),
 						Code: int(rspErr.Code),
 						Msg:  rspErr.Msg,
 					}
@@ -122,7 +122,7 @@ func (o *cli) PExec(ctx context.Context, q *Query) error {
 		if ret, ok := rspData[query.Key]; ok {
 			err = query.GetCoder().Decode(query.ResultType, ret, query.Receiver)
 			if err != nil && query.RespError != nil {
-				*query.RespError = errs.Newf(errs.RetClientDecodeFail,
+				*query.RespError = errs.Newf(errs.ErrClientDecode,
 					"[request_id=%d] %v, result=[%s]", query.RequestID, err, types.InterfaceToString(result))
 			}
 		}
@@ -140,7 +140,7 @@ func (o *cli) CompExec(ctx context.Context, q *Query, retReceiver interface{}) e
 
 	if header.Err != nil && header.Err.Code != 0 {
 		return &errs.Error{
-			Type: int8(header.Err.Type),
+			Type: errs.EType(header.Err.Type),
 			Code: int(header.Err.Code),
 			Msg:  header.Err.Msg,
 		}
@@ -148,7 +148,7 @@ func (o *cli) CompExec(ctx context.Context, q *Query, retReceiver interface{}) e
 
 	err = json.Api.Unmarshal(result, retReceiver)
 	if err != nil {
-		return errs.Newf(errs.RetClientDecodeFail, "[request_id=%d] "+
+		return errs.Newf(errs.ErrClientDecode, "[request_id=%d] "+
 			"result decode to ret receiver error: %v, resp=[%s]", q.RequestID, err, string(result))
 	}
 
@@ -165,7 +165,7 @@ func (o *cli) exec(ctx context.Context, mode uint32, q *Query) (*proto.ResponseH
 
 	q.RequestBody, err = json.Api.Marshal(units)
 	if err != nil {
-		return nil, nil, errs.New(errs.RetClientEncodeFail, "client unit marshal error: "+err.Error())
+		return nil, nil, errs.New(errs.ErrClientEncode, "client unit marshal error: "+err.Error())
 	}
 
 	opts := getOptions(o.name)

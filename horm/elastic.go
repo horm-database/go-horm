@@ -25,7 +25,7 @@ func (s *Query) Scroll(scroll string, size int, where ...Where) *Query {
 	}
 
 	if size <= 0 {
-		s.Error = errs.New(errs.RetClientParamInvalid, "scroll size can`t be zero")
+		s.Error = errs.New(errs.ErrReqParamInvalid, "scroll size can`t be zero")
 		return s
 	}
 

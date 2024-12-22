@@ -968,33 +968,37 @@ func queryModeCompound(ctx context.Context) {
 例如上面案例的 `../.course`，会变成 `/student/student_course.course`，在相对路径转化为绝对路径之后，再根据规则获取指定路径的引用结果。
 
 ## 返回结果
-### IsNil
-当数据源为 mysql、clickhouse、es 等数据库时，如果 Find或者 FindAll 查询的数据为空时，返回参数 isNil=true， 否则，返回参数为 false，
-而当数据源为 redis 时，只有 redis 返回 redigo: nil returned 错误时，才会使得 isNil = true，其他时候都是 isNil = false，即便如下 ZRangeByScore 去查询一个不存在的有序集时。
+### 空返回
+当数据源为 mysql、clickhouse、es 等数据库时，如果 Find 或者 FindAll 查询的数据为空时，返回参数 isNil=true，否则，返回参数为 false，
+而当数据源为 redis 时，只有 redis 返回 redigo: nil returned 错误时，才会使得 isNil = true，其他时候都是 isNil = false，
+即便如下 ZRangeByScore 去查询一个不存在的有序集时。
+
 ```go
-// 查询单条 mysql 数据
-var result Student
-where := horm.Where{"name": "noexist"}
-isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result) // isNil = true
+func queryReturnNil(ctx context.Context) {
+	var result Student
+	where := horm.Where{"name": "noexist"}
+	isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result) // isNil = true
 
-// 查询多条 mysql 数据
-var results []*Student
-where = horm.Where{"name": "noexists"}
-isNil, err = horm.NewQuery("student").FindAll(where).Exec(ctx, &results) // isNil = true
+	var results []*Student
+	where = horm.Where{"name": "noexists"}
+	isNil, err = horm.NewQuery("student").FindAll(where).Exec(ctx, &results) // isNil = true
 
-// redis 中 GET 缓存
-var stu Student
-isNil, err = horm.NewQuery("redis_student").Get("noexists").Exec(ctx, &stu) // isNil = true
+	// redis 中 GET 缓存
+	var stu Student
+	isNil, err = horm.NewQuery("student_redis").Get("noexists").Exec(ctx, &stu) // isNil = true
 
-// redis ZRangeByScore
-rets := make([]*Student, 0)
-scores := make([]float64, 0)
-isNil, err = horm.NewQuery("redis_student"). // isNil = false ， rets 和 scores 为空数组
-ZRangeByScore("noexists", 70, 100, true).Exec(ctx, &rets, &scores)
+	// redis 中 ZRANGEBYSCORE
+	rets := make([]*Student, 0)
+	scores := make([]float64, 0)
+	isNil, err = horm.NewQuery("student_redis"). // isNil = false ， rets 和 scores 为空数组
+							ZRangeByScore("noexists", 70, 100, true).Exec(ctx, &rets, &scores)
+
+	fmt.Println(isNil, err)
+}
 ```
 
-### IsError
-`horm.IsError(err)` 可以判断是否执行失败，如果是 nil returned 错误，不是真正的错误，而是数据为空，或者 redis key 不存在。
+### 返回错误
+
 
 ```go
 func Test(ctx context.Context) {

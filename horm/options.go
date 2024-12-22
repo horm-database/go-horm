@@ -182,7 +182,7 @@ var dbConfigs = make(map[string]*dbConfig)
 func GetDBConfig(name string) (*dbConfig, error) {
 	dbCfg, ok := dbConfigs[name]
 	if !ok || dbCfg == nil {
-		return nil, errs.Newf(errs.RetNotFindDBConfig, "not find db config: %s", name)
+		return nil, errs.Newf(errs.ErrDBConfigNotFound, "not find db config: %s", name)
 	}
 
 	return dbCfg, nil

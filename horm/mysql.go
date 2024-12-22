@@ -51,7 +51,7 @@ func (s *Query) realJoin(table string, joinType string, relation ...interface{})
 			case []string:
 				join.Using = relations
 			default:
-				s.Error = errs.Newf(errs.RetParamInvalid, "the third param`s type must be []string if it is array")
+				s.Error = errs.Newf(errs.ErrReqParamInvalid, "the third param`s type must be []string if it is array")
 				return s
 			}
 		} else if v.Kind() == reflect.Map {
@@ -61,7 +61,8 @@ func (s *Query) realJoin(table string, joinType string, relation ...interface{})
 			case map[string]string:
 				join.On = relations
 			default:
-				s.Error = errs.Newf(errs.RetParamInvalid, "the third param`s type must be map[string]string if it is map")
+				s.Error = errs.Newf(errs.ErrReqParamInvalid,
+					"the third param`s type must be map[string]string if it is map")
 				return s
 			}
 		}

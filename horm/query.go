@@ -172,7 +172,7 @@ func (s *Query) Exec(ctx context.Context, retReceiver ...interface{}) (isNil boo
 	} else if GlobalClient != nil {
 		return GlobalClient.Exec(ctx, head, retReceiver...)
 	}
-	return false, errs.Newf(errs.RetClientNotInit, "client is not init")
+	return false, errs.Newf(errs.ErrClientNotInit, "client is not init")
 }
 
 // PExec 并行执行多个操作单元
@@ -183,7 +183,7 @@ func (s *Query) PExec(ctx context.Context) error {
 	} else if GlobalClient != nil {
 		return GlobalClient.PExec(ctx, head)
 	}
-	return errs.Newf(errs.RetClientNotInit, "client is not init")
+	return errs.Newf(errs.ErrClientNotInit, "client is not init")
 }
 
 // CompExec 复合查询
@@ -194,7 +194,7 @@ func (s *Query) CompExec(ctx context.Context, retReceiver interface{}) error {
 	} else if GlobalClient != nil {
 		return GlobalClient.CompExec(ctx, head, retReceiver)
 	}
-	return errs.Newf(errs.RetClientNotInit, "client is not init")
+	return errs.Newf(errs.ErrClientNotInit, "client is not init")
 }
 
 // WithClient 设置查询客户端

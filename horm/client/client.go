@@ -75,7 +75,7 @@ func (c *Client) getOptions(msg *codec.Msg, target string, timeout time.Duration
 	opts.Timeout = timeout
 
 	if err := opts.parseTarget(); err != nil {
-		return nil, errs.New(errs.RetClientRouteErr, err.Error())
+		return nil, errs.New(errs.ErrClientRoute, err.Error())
 	}
 
 	return opts, nil
@@ -88,7 +88,7 @@ func roundTrip(ctx context.Context, reqBody []byte, opts *Options) (*proto.Respo
 	// check if codec is empty, after updating msg
 	if opts.Codec == nil {
 		metrics.ClientCodecEmpty.Incr()
-		return nil, nil, errs.New(errs.RetClientEncodeFail, "client: codec empty")
+		return nil, nil, errs.New(errs.ErrClientEncode, "client: codec empty")
 	}
 
 	reqBuf, err := createReqBuf(msg, reqBody, opts)
@@ -104,7 +104,7 @@ func roundTrip(ctx context.Context, reqBody []byte, opts *Options) (*proto.Respo
 
 	respHeader, respBodyBuf, err := opts.Codec.Decode(msg, respBuf)
 	if err != nil {
-		return nil, nil, errs.New(errs.RetClientDecodeFail, "client codec Decode: "+err.Error())
+		return nil, nil, errs.New(errs.ErrClientDecode, "client codec Decode: "+err.Error())
 	}
 
 	if respHeader.Err != nil {
@@ -118,13 +118,13 @@ func roundTrip(ctx context.Context, reqBody []byte, opts *Options) (*proto.Respo
 
 	// 请求返回 request_id 不一致，则返回异常
 	if respHeader.RequestId != reqHeader.RequestId {
-		return respHeader, nil, errs.Newf(errs.RetClientRequestIDNotMatch,
+		return respHeader, nil, errs.Newf(errs.ErrRequestIDNotMatch,
 			"response request_id %d different from request request_id %d", respHeader.RequestId, reqHeader.RequestId)
 	}
 
 	// 请求返回 query_mode 不一致，会导致数据解析异常，说明 Exec、PExec、CompExec 用法有误
 	if respHeader.QueryMode != reqHeader.QueryMode {
-		return respHeader, nil, errs.Newf(errs.RetClientQueryModeNotMatch,
+		return respHeader, nil, errs.Newf(errs.ErrQueryModeNotMatch,
 			"response query mode %d different from request query mode %d", respHeader.QueryMode, reqHeader.QueryMode)
 	}
 
@@ -138,7 +138,7 @@ func roundTrip(ctx context.Context, reqBody []byte, opts *Options) (*proto.Respo
 func createReqBuf(msg *codec.Msg, reqBody []byte, opts *Options) ([]byte, error) {
 	reqBuf, err := opts.Codec.Encode(msg, reqBody)
 	if err != nil {
-		return nil, errs.New(errs.RetClientEncodeFail, "client codec Encode: "+err.Error())
+		return nil, errs.New(errs.ErrClientEncode, "client codec Encode: "+err.Error())
 	}
 
 	return reqBuf, nil
@@ -161,8 +161,8 @@ func invoke(ctx context.Context, reqBody []byte, opts *Options) (*proto.Response
 	cost := time.Since(begin)
 
 	if e, ok := err.(*errs.Error); ok &&
-		e.Type == errs.ErrorTypeSystem && (e.Code == errs.RetClientConnectFail ||
-		e.Code == errs.RetClientTimeout || e.Code == errs.RetClientNetErr) {
+		e.Type == errs.ETypeSystem && (e.Code == errs.ErrClientConnect ||
+		e.Code == errs.ErrClientTimeout || e.Code == errs.ErrClientNet) {
 		e.Msg = fmt.Sprintf("%s, cost:%s", e.Msg, cost)
 		opts.Selector.Report(node, cost, err)
 	} else {
@@ -191,11 +191,11 @@ func selectNode(ctx context.Context, opts *Options) (*naming.Node, error) {
 
 	// selector might block for a while, need to check if ctx is still available
 	if ctx.Err() == context.Canceled {
-		return nil, errs.New(errs.RetClientCanceled, "selector canceled after Select: "+ctx.Err().Error())
+		return nil, errs.New(errs.ErrClientCanceled, "selector canceled after Select: "+ctx.Err().Error())
 	}
 
 	if ctx.Err() == context.DeadlineExceeded {
-		return nil, errs.New(errs.RetClientTimeout, "selector timeout after Select: "+ctx.Err().Error())
+		return nil, errs.New(errs.ErrClientTimeout, "selector timeout after Select: "+ctx.Err().Error())
 	}
 
 	opts.LoadNodeConfig(node)
@@ -207,11 +207,11 @@ func selectNode(ctx context.Context, opts *Options) (*naming.Node, error) {
 func getNode(opts *Options) (*naming.Node, error) {
 	node, err := opts.Selector.Select(opts.EndPoint, &opts.SelectOptions)
 	if err != nil {
-		return nil, errs.New(errs.RetClientRouteErr, "client Select: "+err.Error())
+		return nil, errs.New(errs.ErrClientRoute, "client Select: "+err.Error())
 	}
 
 	if node.Address == "" {
-		return nil, errs.New(errs.RetClientRouteErr, fmt.Sprintf("client Select: node address empty:%+v", node))
+		return nil, errs.New(errs.ErrClientRoute, fmt.Sprintf("client Select: node address empty:%+v", node))
 	}
 	return node, nil
 }

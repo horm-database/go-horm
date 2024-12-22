@@ -23,12 +23,12 @@ type Error proto.Error
 type RspErrs map[string]*Error
 
 // GetType 获取执行单元的错误类型
-func (re *RspErrs) GetType(name string) int8 {
+func (re *RspErrs) GetType(name string) errs.EType {
 	if err, ok := (*re)[name]; ok {
-		return int8(err.Type)
+		return errs.EType(err.Type)
 	}
 
-	return errs.ErrorTypeSystem
+	return errs.ETypeSystem
 }
 
 // GetCode 获取执行单元的返回码
@@ -66,7 +66,7 @@ func (re *RspErrs) Error(name string) error {
 	}
 
 	return &errs.Error{
-		Type: int8(err.Type),
+		Type: errs.EType(err.Type),
 		Code: int(err.Code),
 		Msg:  err.Msg,
 	}
