@@ -351,12 +351,12 @@ func (s *Query) setData(typ codec.EncodeType, data interface{}) *Query {
 			return s
 		}
 
-		switch v := d.(type) {
+		switch dv := d.(type) {
 		case map[string]interface{}:
-			s.Unit.Data = v
+			s.Unit.Data = dv
 			return s.setDataType(s.Unit.Data)
 		case []map[string]interface{}:
-			s.Unit.Datas = v
+			s.Unit.Datas = dv
 			return s.setDataType(s.Unit.Datas[0])
 		}
 	}

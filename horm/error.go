@@ -19,17 +19,6 @@ import (
 	"github.com/horm-database/common/proto"
 )
 
-// IsAllSuccess 判断 es 批量插入是否全部成功
-func IsAllSuccess(results []*proto.ModRet) bool {
-	for _, ret := range results {
-		if ret.Status != 0 {
-			return false
-		}
-	}
-
-	return true
-}
-
 // Error 返回信息
 type Error proto.Error
 
@@ -84,4 +73,15 @@ func (re *RspErrs) Error(name string) error {
 		Code: int(err.Code),
 		Msg:  err.Msg,
 	}
+}
+
+// IsAllSuccess 判断 es 批量插入是否全部成功
+func IsAllSuccess(results []*proto.ModRet) bool {
+	for _, ret := range results {
+		if ret.Status != 0 {
+			return false
+		}
+	}
+
+	return true
 }

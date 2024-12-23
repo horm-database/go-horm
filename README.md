@@ -968,10 +968,10 @@ func queryModeCompound(ctx context.Context) {
 例如上面案例的 `../.course`，会变成 `/student/student_course.course`，在相对路径转化为绝对路径之后，再根据规则获取指定路径的引用结果。
 
 ## 返回结果
-### 空返回
+### 空返回 和 error
 当数据源为 mysql、clickhouse、es 等数据库时，如果 Find 或者 FindAll 查询的数据为空时，返回参数 isNil=true，否则，返回参数为 false，
 而当数据源为 redis 时，只有 redis 返回 redigo: nil returned 错误时，才会使得 isNil = true，其他时候都是 isNil = false，
-即便如下 ZRangeByScore 去查询一个不存在的有序集时。
+即便如下 ZRangeByScore 去查询一个不存在的有序集时，isNil 已然为 false。
 
 ```go
 func queryReturnNil(ctx context.Context) {
@@ -997,25 +997,64 @@ func queryReturnNil(ctx context.Context) {
 }
 ```
 
-### 返回错误
+上面展示的是单执行单元的返回结果，在单执行单元中，is_nil、error 参数在 ResponseHeader 中返回客户端：
+```protobuf
+/* ResponseHeader 响应头 */
+message ResponseHeader {
+  ...
+  Error err = 5;                     // 返回错误
+  bool is_nil = 6;                   // 返回是否为空（针对单执行单元）
+}
+```
 
+在并行查询中，一般系统返回，例如请求参数错误、解析失败、网络错误、系统错误都会在 ResponseHeader 的 err 返回。每个并行查询单元
+的 is_nil、error 结果则会在 ResponseHeader 中的 rsp_nils、rsp_errs 中返回给客户端，这是一个 map，key 为请求名(别名)，
+在 golang sdk 里面通过每个 Query 的 WithReceiver 来接收。
+```protobuf
+/* ResponseHeader 响应头 */
+message ResponseHeader {
+  ...
+  Error err = 5;                     // 返回错误
+  map<string, Error> rsp_errs = 7;   // 错误返回（针对多执行单元并发）
+  map<string, bool> rsp_nils = 8;    // 是否为空返回（针对多执行单元并发）
+}
+```
 
 ```go
-func Test(ctx context.Context) {
-	var result = make([]*Students, 0)
-	err := horm.NewQuery("student").FindAll().Exec(ctx, &result)
-	
-	if horm.IsError(err) { //可以判断是否执行失败，如果是 nil returned 错误，不是真正的错误，而是数据为空，或者 redis key 不存在。
-		fmt.Printf("find student error: %v", err)
-		return
+func queryReturnError2(ctx context.Context) {
+	data := map[string]interface{}{
+		"no_field": nil,
 	}
 
-	if horm.IsNil(err) { // err = nil returned，所有空数据都返回这个错误。
-		fmt.Printf("not fine student")
-	}
-	
-	
+	var addErr, findErr error
+	var addRet = proto.ModRet{}
+	var student = Student{}
+
+	err := horm.NewQuery("student(add)").
+		Insert(data).WithReceiver(nil, &addErr, &addRet).
+		Next("student(find)").
+		Find(horm.Where{"no_field": "caohao"}).WithReceiver(nil, &findErr, &student).
+		PExec(ctx)
+
 	...
+}
+```
+
+在复合查询中，请求参数错误、解析失败、网络错误、系统错误依然在 ResponseHeader 的 err 中返回，每个查询单元的 is_nil、error 则包含在结果里面。
+```go
+package proto // "github.com/horm-database/common/proto"
+
+// CompResult 混合查询返回结果
+type CompResult struct {
+	RetBase             // 返回基础信息
+	Data    interface{} `json:"data"` // 返回数据
+}
+
+// RetBase 混合查询返回结果基础信息
+type RetBase struct {
+	Error  *Error  `json:"error,omitempty"`  // 错误返回
+	IsNil  bool    `json:"is_nil,omitempty"` // 是否为空
+	Detail *Detail `json:"detail,omitempty"` // 查询细节信息
 }
 ```
 
