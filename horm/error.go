@@ -72,6 +72,7 @@ func (re *RspErrs) Error(name string) error {
 		Type: errs.EType(err.Type),
 		Code: int(err.Code),
 		Msg:  err.Msg,
+		Sql:  err.Sql,
 	}
 }
 

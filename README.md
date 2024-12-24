@@ -986,7 +986,7 @@ func queryModeCompound(ctx context.Context) {
 ### 空返回 和 error
 当数据源为 mysql、clickhouse、es 等数据库时，如果 Find 或者 FindAll 查询的数据为空时，返回参数 isNil=true，否则，返回参数为 false，
 而当数据源为 redis 时，只有 redis 返回 redigo: nil returned 错误时，才会使得 isNil = true，其他时候都是 isNil = false，
-即便如下 ZRangeByScore 去查询一个不存在的有序集时，isNil 已然为 false。
+即便如下 ZRangeByScore 去查询一个不存在的有序集时，isNil 也是 false。
 
 ```go
 func queryReturnNil(ctx context.Context) {
@@ -1022,9 +1022,9 @@ message ResponseHeader {
 }
 ```
 
-在并行查询中，一般系统返回，例如请求参数错误、解析失败、网络错误、系统错误都会在 ResponseHeader 的 err 返回。每个并行查询单元
-的 is_nil、error 结果则会在 ResponseHeader 中的 rsp_nils、rsp_errs 中返回给客户端，这是一个 map，key 为请求名(别名)，
-在 golang sdk 里面通过每个 Query 的 WithReceiver 来接收。
+在并行查询中，一般系统返回，例如请求参数错误、解析失败、网络错误、权限错误等都会在 ResponseHeader 的 err 返回。
+每个并行查询单元的 is_nil、error 结果则会在 ResponseHeader 中的 rsp_nils、rsp_errs 中返回给客户端，
+这是一个 map，key是请求名(别名)，在 golang sdk 里面通过每个 Query 的 WithReceiver 来接收。
 ```protobuf
 /* ResponseHeader 响应头 */
 message ResponseHeader {
@@ -1055,7 +1055,8 @@ func queryReturnError2(ctx context.Context) {
 }
 ```
 
-在复合查询中，请求参数错误、解析失败、网络错误、系统错误依然在 ResponseHeader 的 err 中返回，每个查询单元的 is_nil、error 则包含在结果里面。
+在复合查询中，请求参数错误、解析失败、网络错误、权限错误等依然在 ResponseHeader 的 err 中返回，
+每个查询单元的 is_nil、error 则包含在结果里面。
 ```go
 package proto // "github.com/horm-database/common/proto"
 
@@ -1072,6 +1073,29 @@ type RetBase struct {
 	Detail *Detail `json:"detail,omitempty"` // 查询细节信息
 }
 ```
+
+数据统一接入服务的错误结构如下，错误包含：错误类型，错误码，错误信息，异常查询语句组成（sql不仅指代sql语句，elastic语句、redis 命令也包含在内）
+```protobuf
+message Error {
+  int32  type = 1; //错误类型
+  int32  code = 2; //错误码
+  string msg = 3;  //错误信息
+  string sql = 4;  //异常sql语句
+}
+```
+错误类型包含3大类，比如请求参数错误、解析失败、网络错误、权限错误等都属于系统错误，找不到插件、插件未注册、插件执行错误等都属于插件错误。
+数据库执行报错都属于数据库错误。
+```go
+// EType 错误类型
+type EType int8
+
+const (
+	ETypeSystem   EType = 0 //系统错误
+	ETypePlugin   EType = 1 //插件错误
+	ETypeDatabase EType = 2 //数据库错误
+)
+```
+
 
 ### IsAllSuccess
 这个函数仅用于 Elastic 批量插入新数据时候，返回 `[]*horm.EsResult`，可以用 IsAllSuccess 去判断数据是否全部插入成功，当只有部分成功的时候，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因，这样，我们可以针对失败的记录做特殊处理，或者重试。
