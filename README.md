@@ -278,6 +278,7 @@ func queryByGlobalClient(ctx context.Context) {
 ```
 
 # 查询单元（执行单元）
+## 数据名称
 我们在客户端通过 horm.NewQuery 来创建一个查询，每个查询语句需要指定一个名称，如下的 `horm.NewQuery("student") 中的 student`，
 horm 会生成一个执行单元（查询单元），并发送到数据统一接入服务， 在数据统一接入服务通过 `数据名称` 找到对应的mysql表/es索引/redis配置信息、
 及其数据库信息，然后根据协议将执行单元转化为对应数据库 sql语句、elastic 请求或 redis 请求，并将执行结果返回到客户端。
@@ -295,6 +296,19 @@ func Test(ctx context.Context) {
 }
 ```
 
+如果存在相同的数据名称的时候，我们可以通过增加库名来区分如下，否则会报错，不允许存在相同的库名+数据名。
+```go
+import (
+	...
+	"github.com/horm-database/go-horm/horm"
+)
+
+func Test(ctx context.Context) {
+	var result = make([]*Students, 0)
+	err := horm.NewQuery("test::student").FindAll().Exec(ctx, &result)
+	...
+}
+```
 ## 查询单元结构体
 一个完整的执行单元包含如下信息：
 ```go
@@ -584,7 +598,8 @@ func queryPageReturn2(ctx context.Context) {
 
 ## 并行查询
 ### 并发同时执行
-为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
+为了高效并发，我们可以用 `PExec` 函数将多个语句一同上传到数据统一接入服务，由数据统一接入服务并发执行，并返回结果，在 Query 语句里面，
+可以通过 `Next` 新建一个并发语句，然后通过 `WithReceiver` 传入对应指针来接收每个执行语句返回的 isNil、error 和结果。
 
 `注意：如果并行执行访问同一个数据时，为了区别，可以像下面一样在括号里面加别名：redis_student(zadd) 和 redis_student(range)。`<br><br>
 
