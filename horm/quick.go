@@ -17,6 +17,7 @@ package horm
 import (
 	"github.com/horm-database/common/consts"
 	"github.com/horm-database/common/errs"
+	"github.com/horm-database/common/structs"
 )
 
 // Eq equal mean where key1=value1 AND key2=value2 ...
@@ -181,11 +182,11 @@ func (s *Query) UpdateKV(key string, value interface{}, kvs ...interface{}) *Que
 	}
 
 	if len(s.Unit.DataType) == 0 {
-		s.Unit.DataType = make(map[string]consts.DataType)
+		s.Unit.DataType = make(map[string]structs.Type)
 	}
 
 	typ := consts.GetDataType(value)
-	if typ != consts.DataTypeOther {
+	if typ != 0 {
 		s.Unit.DataType[key] = typ
 	}
 
@@ -207,7 +208,7 @@ func (s *Query) UpdateKV(key string, value interface{}, kvs ...interface{}) *Que
 				}
 			} else {
 				typ = consts.GetDataType(v)
-				if typ != consts.DataTypeOther {
+				if typ != 0 {
 					s.Unit.DataType[key] = typ
 				}
 

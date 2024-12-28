@@ -18,19 +18,18 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/araddon/dateparse"
 	"github.com/horm-database/common/codec/mapstructure"
-	"github.com/horm-database/common/json"
+	"github.com/horm-database/common/types"
 )
-
-var DefaultMap2Structure = &Map2Structure{DefaultTag, true, true}
 
 type Map2Structure struct {
 	tagName    string
 	weaklyType bool
 	squash     bool
+	l          *time.Location
 }
 
-var typeTime = reflect.TypeOf(time.Time{})
 var typeString = reflect.TypeOf("")
 
 func (m *Map2Structure) Decode(src, dest interface{}) error {
@@ -40,11 +39,22 @@ func (m *Map2Structure) Decode(src, dest interface{}) error {
 		Result:           dest,
 		TagName:          m.tagName,
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
-			func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
-				if t == typeTime && f == typeString {
-					tt := time.Time{}
-					err := json.Api.Unmarshal([]byte(`"`+data.(string)+`"`), &tt)
-					return tt, err
+			func(str reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
+				if str == typeString && types.IsTime(t) {
+					var tt time.Time
+					var err error
+
+					if m.l == nil {
+						tt, err = dateparse.ParseAny(data.(string))
+					} else {
+						tt, err = dateparse.ParseIn(data.(string), m.l)
+					}
+
+					if err != nil {
+						return nil, err
+					}
+
+					return reflect.ValueOf(tt).Convert(t).Interface(), err
 				}
 
 				return data, nil

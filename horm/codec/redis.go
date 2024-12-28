@@ -22,7 +22,7 @@ import (
 	"strconv"
 
 	redigo "github.com/gomodule/redigo/redis"
-	"github.com/horm-database/common/structspec"
+	"github.com/horm-database/common/structs"
 	"github.com/horm-database/common/types"
 )
 
@@ -104,14 +104,14 @@ func (dc *defaultCodec) hmSet(v interface{}) (interface{}, error) {
 
 // struct -> [field1, value1, field2, value2 ...]
 func (dc *defaultCodec) hmsetStruct(v reflect.Value) ([]interface{}, error) {
-	ss := structspec.GetStructSpec(dc.GetTag(), v.Type())
+	ss := structs.GetStructSpec(dc.GetTag(), v.Type())
 	args := make([]interface{}, 2*len(ss.Fs))
 
 	var i int
 
 	for _, fs := range ss.Fs {
 		fv := v.FieldByIndex(fs.Index)
-		if dc.omitEmpty && fs.OmitEmpty && types.IsEmptyValue(fv) {
+		if dc.omitEmpty && fs.OmitEmpty && types.IsEmpty(fv) {
 			continue
 		}
 
@@ -197,7 +197,7 @@ func (dc *defaultCodec) decodeMapSlice(src interface{}, dest interface{}) (err e
 }
 
 func (dc *defaultCodec) decodeMap2Struct(src map[string]string, rv reflect.Value) error {
-	ss := structspec.GetStructSpec(dc.GetTag(), rv.Type())
+	ss := structs.GetStructSpec(dc.GetTag(), rv.Type())
 	for name, s := range src {
 		fs := ss.ColumnSpec(name)
 		if fs == nil {
@@ -244,7 +244,7 @@ func (dc *defaultCodec) decodeSlice2Struct(src []interface{}, rv reflect.Value) 
 		return errors.New("number of values not a multiple of 2")
 	}
 
-	ss := structspec.GetStructSpec(dc.GetTag(), rv.Type())
+	ss := structs.GetStructSpec(dc.GetTag(), rv.Type())
 	for i := 0; i < len(src); i += 2 {
 		s := src[i+1]
 		if s == nil {

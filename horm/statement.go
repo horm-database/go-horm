@@ -21,6 +21,7 @@ import (
 
 	"github.com/horm-database/common/consts"
 	"github.com/horm-database/common/errs"
+	"github.com/horm-database/common/structs"
 	"github.com/horm-database/common/util"
 	"github.com/horm-database/go-horm/horm/codec"
 )
@@ -234,11 +235,11 @@ func (s *Query) Source(q string, args ...interface{}) *Query {
 	s.Unit.Query = q
 	s.Unit.Args = args
 
-	s.Unit.DataType = map[string]consts.DataType{}
+	s.Unit.DataType = map[string]structs.Type{}
 
 	for k, v := range args {
 		typ := consts.GetDataType(v)
-		if typ != consts.DataTypeOther {
+		if typ != 0 {
 			s.Unit.DataType[strconv.Itoa(k)] = typ
 		}
 	}
@@ -366,11 +367,11 @@ func (s *Query) setData(typ codec.EncodeType, data interface{}) *Query {
 }
 
 func (s *Query) setDataType(data map[string]interface{}) *Query {
-	s.Unit.DataType = map[string]consts.DataType{}
+	s.Unit.DataType = map[string]structs.Type{}
 
 	for key, value := range data {
 		typ := consts.GetDataType(value)
-		if typ != consts.DataTypeOther {
+		if typ != 0 {
 			s.Unit.DataType[key] = typ
 		}
 	}

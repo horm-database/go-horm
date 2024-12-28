@@ -78,45 +78,53 @@ CREATE TABLE `score_rank_reward` (
 
 ## golang 结构体：
 ```go
+import (
+  "time"
+  
+  "github.com/horm-database/common/types"
+)
+
 type Student struct {
-  Id        int       `orm:"id,int,onuniqueid" json:"id"`
-  Identify  int64     `orm:"identify,bigint" json:"identify"`                     //学生编号
-  Gender    int8      `orm:"gender,tinyint,omitinsertempty" json:"gender"`        //1-male 2-female
-  Age       uint      `orm:"age,int unsigned,omitreplaceempty" json:"age"`        //年龄
-  Name      string    `orm:"name,varchar,omitupdateempty" json:"name"`            //名称
-  Score     float64   `orm:"score,double,omitempty" json:"score"`                 //分数
-  Image     []byte    `orm:"image,blob,omitempty" json:"image"`                   //image
-  Article   string    `orm:"article,text,omitempty" json:"article"`               //publish article
-  ExamTime  string    `orm:"exam_time,time,omitempty" json:"exam_time"`           //考试时间
-  Birthday  time.Time `orm:"birthday,date" json:"birthday"`                       //出生日期
-  CreatedAt time.Time `orm:"created_at,timestamp,oncreatetime" json:"created_at"` //创建时间
-  UpdatedAt time.Time `orm:"updated_at,datetime,onupdatetime" json:"updated_at"`  //修改时间
+    Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`
+    Identify  int64      `orm:"identify,int64" json:"identify"`                      //学生编号
+    Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`           //1-male 2-female
+    Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                //年龄
+    Name      string     `orm:"name,string,omitupdateempty" json:"name"`             //名称
+    Score     float64    `orm:"score,double,omitempty" json:"score"`                 //分数
+    Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                  //image
+    Article   string     `orm:"article,string,omitempty" json:"article"`             //publish article
+    ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`         //考试时间
+    Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` //出生日期
+    CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`      //创建时间
+    UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //修改时间
 }
+
 ```
 
 ```go
 type StudentCourse struct {
-  Id       uint64 `orm:"id,int,omitempty" json:"id"`
-  Identify int64  `orm:"identify,bigint" json:"identify"` //学生编号
-  Course   string `orm:"course,varchar" json:"course"`    //课程
-  Hours    int    `orm:"hours,int" json:"hours"`          //课时数
+	Id       int    `orm:"id,int,omitempty" json:"id"`
+	Identify int64  `orm:"identify,int64" json:"identify"` //学生编号
+	Course   string `orm:"course,string" json:"course"`    //课程
+	Hours    int    `orm:"hours,int" json:"hours"`         //课时数
 }
 
 type CourseInfo struct {
-  Course  string `orm:"course,varchar" json:"course"`   //课程
-  Teacher string `orm:"teacher,varchar" json:"teacher"` //课程老师
-  Time    string `orm:"time,time" json:"time"`          //上课时间
+	Course  string `orm:"course,string" json:"course"`   //课程
+	Teacher string `orm:"teacher,string" json:"teacher"` //课程老师
+	Time    string `orm:"time,string" json:"time"`       //上课时间
 }
 
 type TeacherInfo struct {
-  Teacher string `orm:"teacher,varchar" json:"teacher"` //课程老师
-  Age     int    `orm:"age,int" json:"age"`             //年龄
+	Teacher string `orm:"teacher,string" json:"teacher"` //课程老师
+	Age     int    `orm:"age,int" json:"age"`            //年龄
 }
 
 type ScoreRankReward struct {
-  Rank   int    `orm:"rank,int" json:"rank"`         //排名
-  Reward string `orm:"reward,varchar" json:"reward"` //奖励
+	Rank   int    `orm:"rank,int" json:"rank"`        //排名
+	Reward string `orm:"reward,string" json:"reward"` //奖励
 }
+
 ```
 
 ## 结构体标签
@@ -124,18 +132,18 @@ type ScoreRankReward struct {
 ```golang
 //示例结构体
 type Student struct {
-  Id        int       `orm:"id,int,onuniqueid" json:"id"`                         //onuniqueid 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，每个实例不一样。否则可能会有冲突，当然，你也可以采用数据库的自增id作为主键，这时候，最好加上 omitempty 。
-  Identify  int64     `orm:"identify,bigint" json:"identify"`                     
-  Gender    int8      `orm:"gender,tinyint,omitinsertempty" json:"gender"`        //omitinsertempty 插入忽略零值，即在插入数据的时候，如果 Gender 字段为零值，则 insert sql 语句会忽略这个字段。
-  Age       uint      `orm:"age,int unsigned,omitreplaceempty" json:"age"`        //omitreplaceempty 替换忽略零值
-  Name      string    `orm:"name,varchar,omitupdateempty" json:"name"`            //omitupdateempty 更新忽略零值
-  Score     float64   `orm:"score,double,omitempty" json:"score"`           
-  Image     []byte    `orm:"image,blob,omitempty" json:"image"`                   
-  Article   string    `orm:"article,text,omitempty" json:"article"`               //omitempty 忽略零值，= omitinsertempty + omitreplaceempty + omitupdateempty 表示插入、替换、更新都忽略零值，如 Auto Increment 需要
-  ExamTime  string    `orm:"exam_time,time,omitempty" json:"exam_time"`         
-  Birthday  time.Time `orm:"birthday,date" json:"birthday"`                      
-  CreatedAt time.Time `orm:"created_at,timestamp,oncreatetime" json:"created_at"` //oncreatetime 插入时自动初始化为当前时间
-  UpdatedAt time.Time `orm:"updated_at,datetime,onupdatetime" json:"updated_at"`  //onupdatetime 自动修改为当前时间
+  Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`              //onuniqueid 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，每个实例不一样。否则可能会有冲突，当然，你也可以采用数据库的自增id作为主键，这时候，最好加上 omitempty 。
+  Identify  int64      `orm:"identify,int64" json:"identify"`                     
+  Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`   //omitinsertempty 插入忽略零值，即在插入数据的时候，如果 Gender 字段为零值，则 insert sql 语句会忽略这个字段。
+  Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`        //omitreplaceempty 替换忽略零值 
+  Name      string     `orm:"name,string,omitupdateempty" json:"name"`     //omitupdateempty 更新忽略零值       
+  Score     float64    `orm:"score,double,omitempty" json:"score"`            
+  Image     []byte     `orm:"image,bytes,omitempty" json:"image"`               
+  Article   string     `orm:"article,string,omitempty" json:"article"`     //omitempty 忽略零值，= omitinsertempty + omitreplaceempty + omitupdateempty 表示插入、替换、更新都忽略零值，如 Auto Increment 需要
+  ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`      
+  Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` //time_fmt 会使得请求的时候，会将 birthday 转化为 `2006-01-02` 格式，在服务端返回字符串是 "2006-01-02" 格式时，只有类型 types.Time 才能正确接收结果。
+  CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`      //oncreatetime 插入时自动初始化为当前时间
+  UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //onupdatetime 自动修改为当前时间
 }
 ```
 
@@ -147,18 +155,20 @@ type FieldSpec struct {
   Name             string // 字段名
   I                int    // 位置
   Index            []int
-  Column           string // 对应数据库字段名
-  Type             string // 表字段类型，bool、string、int、int8、int16、int32、int64、uint、uint8、uint16、uint32、uint64、float、float64、blob(bytes)、enum、json、date、datetime
-  OmitEmpty        bool   // 忽略零值
-  OmitInsertEmpty  bool   // INSERT 时忽略零值
-  OmitReplaceEmpty bool   // REPLACE 时忽略零值
-  OmitUpdateEmpty  bool   // UPDATE 时忽略零值
-  OnCreateTime     bool   // INSERT/REPLACE 时初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型
-  OnUpdateTime     bool   // 数据变更时修改为当前时间，具体格式根据 Type 决定，这里我推荐数据库自带的时间戳更新功能。
-  OnUniqueID       bool   // 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突
+  Column           string  // 对应数据库字段名
+  Type             Type    // orm 类型，不同数据库会映射到不同类型
+  OmitEmpty        bool    // 忽略零值
+  OmitInsertEmpty  bool    // INSERT 时忽略零值
+  OmitReplaceEmpty bool    // REPLACE 时忽略零值
+  OmitUpdateEmpty  bool    // UPDATE 时忽略零值
+  OnCreateTime     bool    // INSERT/REPLACE 时初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型
+  OnUpdateTime     bool    // 数据变更时修改为当前时间，具体格式根据 Type 决定，这里我推荐数据库自带的时间戳更新功能。
+  TimeFmt          string  // 当字段底层类型为 time.Time 时，格式化时间，仅针对请求格式化，返回数据的解析在 codec 内。
+  OnUniqueID       bool    // 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突
 }
 
 ```
+
 
 # horm 客户端
 为了访问数据统一接入服务，我们需要创建 Client 来与服务端建立连接，horm 提供了2种方式来指定 Query 语句使用的客户端。
@@ -316,7 +326,7 @@ func Test(ctx context.Context) {
 package proto
 
 import (
-	"github.com/horm-database/common/consts"
+	"github.com/horm-database/common/structs"
 )
 
 // Unit 查询单元（执行单元）
@@ -337,7 +347,7 @@ type Unit struct {
 	// 数据更新
 	Data     map[string]interface{}     `json:"data,omitempty"`      // add/update one data
 	Datas    []map[string]interface{}   `json:"datas,omitempty"`     // batch add/update data
-	DataType map[string]consts.DataType `json:"data_type,omitempty"` // 数据类型（主要用于 clickhouse，对于数据类型有强依赖），请求 json 不区分 int8、int16、int32、int64 等，只有 Number 类型，bytes 也会被当成 string 处理。
+	DataType map[string]structs.Type    `json:"data_type,omitempty"` // 数据类型（主要用于 clickhouse，对于数据类型有强依赖），请求 json 不区分 int8、int16、int32、int64 等，只有 Number 类型，bytes 也会被当成 string 处理。
 
 	// group by
 	Group  []string               `json:"group,omitempty"`  // group by
@@ -385,6 +395,176 @@ type Join struct {
 }
 ```
 
+## 数据类型
+执行单元中的 data、datas、args 等数据参数，包含的数据类型如下： 
+```go
+//github.com/horm-database/common/structs/type.go
+package structs
+
+type Type int8
+
+const (
+	TypeTime   Type = 1 // 类型是 time.Time
+	TypeBytes  Type = 2 // 类型是 []byte
+	TypeInt    Type = 3
+	TypeInt8   Type = 4
+	TypeInt16  Type = 5
+	TypeInt32  Type = 6
+	TypeInt64  Type = 7
+	TypeUint   Type = 8
+	TypeUint8  Type = 9
+	TypeUint16 Type = 10
+	TypeUint32 Type = 11
+	TypeUint64 Type = 12
+	TypeFloat  Type = 13
+	TypeDouble Type = 14
+	TypeString Type = 15
+	TypeBool   Type = 16
+	TypeJSON   Type = 17
+)
+
+var TypeDesc = map[string]Type{
+	"time":   TypeTime,
+	"bytes":  TypeBytes,
+	"int":    TypeInt,
+	"int8":   TypeInt8,
+	"int16":  TypeInt16,
+	"int32":  TypeInt32,
+	"int64":  TypeInt64,
+	"uint":   TypeUint,
+	"uint8":  TypeUint8,
+	"uint16": TypeUint16,
+	"uint32": TypeUint32,
+	"uint64": TypeUint64,
+	"float":  TypeFloat,
+	"double": TypeDouble,
+	"string": TypeString,
+	"bool":   TypeBool,
+	"json":   TypeJSON,
+}
+```
+
+我们发送请求到数据统一调度服务的时候，默认情况下可以不指定数据类型，但是在某些情况下，比如 clickhouse 对类型有强限制，需要指定具体的类型，
+又或者一个超大的 uint64 整数，json.Marshal 编码之后请求服务端，由于 json 的基础类型只包含 string、number(当成float64)、bool 在服务端
+会被转化为 float64，存在精度丢失问题， 所以当类型为 time、[]byte、int、int8~int64、uint、uint8~uint64 时，需要在执行单元 data_type 
+字段里将数据类型带上，当然在 golang horm 中，sdk 里面会自动帮我们处理，如下案例：
+
+```go
+import (
+  ...
+  "github.com/horm-database/go-horm/horm"
+)
+
+func queryDataType(ctx context.Context) {
+	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+
+	data := Student{
+		Identify: 2024080313,
+		Gender:   2,
+		Age:      23,
+		Name:     "kitty",
+		Score:    91.5,
+		Image:    []byte("IMAGE.PCG"),
+		Article:  "Artificial Intelligence",
+		ExamTime: "15:30:00",
+		Birthday: types.Time(birthday),
+	}
+
+	var isNil bool
+	var addRet = proto.ModRet{}
+
+	//下面操作有加别名
+	isNil, err := horm.NewQuery("student").Insert(&data).Exec(ctx, &addRet)
+    ...
+}
+```
+上面代码生成的 json 请求为：
+```json
+{
+  "name": "student",
+  "op": "insert",
+  "data": {
+    "article": "Artificial Intelligence",
+    "exam_time": "15:30:00",
+    "created_at": "2024-12-28T12:51:52.846304+08:00",
+    "name": "kitty",
+    "image": "SU1BR0UuUENH",
+    "identify": 2024080313,
+    "gender": 2,
+    "score": 91.5,
+    "birthday": "1987-08-27",
+    "age": 23,
+    "updated_at": "2024-12-28T12:51:52.846305+08:00",
+    "id": 231035320542441473
+  },
+  "data_type": {
+    "identify": 7,
+    "gender": 4,
+    "created_at": 1,
+    "updated_at": 1,
+    "id": 12,
+    "age": 8,
+    "image": 2
+  }
+}
+```
+
+horm 基础类型，会在数据统一接入服务根据指定的数据源引擎映射、解析成对应的类型在 mysql 和 clickhouse 类型映射为：
+```go
+//github.com/orm/database/sql/type.go
+
+var MySQLTypeMap = map[string]structs.Type{
+  "INT":                structs.TypeInt,
+  "TINYINT":            structs.TypeInt8,
+  "SMALLINT":           structs.TypeInt16,
+  "MEDIUMINT":          structs.TypeInt32,
+  "BIGINT":             structs.TypeInt64,
+  "UNSIGNED INT":       structs.TypeUint,
+  "UNSIGNED TINYINT":   structs.TypeUint8,
+  "UNSIGNED SMALLINT":  structs.TypeUint16,
+  "UNSIGNED MEDIUMINT": structs.TypeUint32,
+  "UNSIGNED BIGINT":    structs.TypeUint64,
+  "BIT":                structs.TypeBytes,
+  "FLOAT":              structs.TypeFloat,
+  "DOUBLE":             structs.TypeDouble,
+  "DECIMAL":            structs.TypeDouble,
+  "VARCHAR":            structs.TypeString,
+  "CHAR":               structs.TypeString,
+  "TEXT":               structs.TypeString,
+  "BLOB":               structs.TypeBytes,
+  "BINARY":             structs.TypeBytes,
+  "VARBINARY":          structs.TypeBytes,
+  "TIME":               structs.TypeString,
+  "DATE":               structs.TypeTime,
+  "DATETIME":           structs.TypeTime,
+  "TIMESTAMP":          structs.TypeTime,
+  "JSON":               structs.TypeJSON,
+}
+
+var ClickHouseTypeMap = map[string]structs.Type{
+  "Int":         structs.TypeInt,
+  "Int8":        structs.TypeInt8,
+  "Int16":       structs.TypeInt16,
+  "Int32":       structs.TypeInt32,
+  "Int64":       structs.TypeInt64,
+  "UInt":        structs.TypeUint,
+  "UInt8":       structs.TypeUint8,
+  "UInt16":      structs.TypeUint16,
+  "UInt32":      structs.TypeUint32,
+  "UInt64":      structs.TypeUint64,
+  "Float":       structs.TypeFloat,
+  "Float32":     structs.TypeFloat,
+  "Float64":     structs.TypeDouble,
+  "Decimal":     structs.TypeDouble,
+  "String":      structs.TypeString,
+  "FixedString": structs.TypeString,
+  "UUID":        structs.TypeString,
+  "DateTime":    structs.TypeTime,
+  "DateTime64":  structs.TypeTime,
+  "Date":        structs.TypeTime,
+}
+```
+
 ## 别名
 如果我们用到 mysql 的别名，或者在并发查询、复合查询模式下、同一层级的多个查询单元如果访问同一张表，为了结果的正常，我们必须在括号里加上别名，
 如下代码的`horm.NewQuery("student(add)")` 和 `Next("student(find_all)")` ，我们都是访问 redis_student。
@@ -392,6 +572,7 @@ type Join struct {
 import (
     ...
     "github.com/horm-database/common/proto"
+    "github.com/horm-database/common/types"
     "github.com/horm-database/go-horm/horm"
 )
 
@@ -407,7 +588,7 @@ func queryAlias(ctx context.Context) {
 		Image:    []byte("IMAGE.PCG"),
 		Article:  "Artificial Intelligence",
 		ExamTime: "15:30:00",
-		Birthday: birthday,
+		Birthday: types.Time(birthday),
 	}
 
 	var isNil bool
@@ -513,6 +694,7 @@ func queryModeSingle(ctx context.Context) {
 import (
     ...
     "github.com/horm-database/go-horm/horm"
+    "github.com/horm-database/common/types"
 )
 
 func queryMultiReturn(ctx context.Context) {
@@ -526,7 +708,7 @@ func queryMultiReturn(ctx context.Context) {
 		Image:    []byte("IMAGE.PCG"),
 		Article:  "Artificial Intelligence",
 		ExamTime: "15:30:00",
-		Birthday: birthday,
+		Birthday: types.Time(birthday),
 	}
 
 	_, err := horm.NewQuery("redis_student").
@@ -619,7 +801,7 @@ func queryModeParallel(ctx context.Context) {
     Image:    []byte("IMAGE.PCG"),
     Article:  "Artificial Intelligence",
     ExamTime: "15:30:00",
-    Birthday: birthday,
+    Birthday: types.Time(birthday),
   }
   
   var isNil bool
@@ -1096,60 +1278,163 @@ const (
 )
 ```
 
-
 ### IsAllSuccess
-这个函数仅用于 Elastic 批量插入新数据时候，返回 `[]*horm.EsResult`，可以用 IsAllSuccess 去判断数据是否全部插入成功，当只有部分成功的时候，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因，这样，我们可以针对失败的记录做特殊处理，或者重试。
+这个函数仅用于 Elastic 批量插入新数据时候，返回 `[]*proto.ModRet`，可以用 IsAllSuccess 去判断数据是否全部插入成功，
+当只有部分成功的时候，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因，
+这样，我们可以针对失败的记录做特殊处理，比如重试。
 ```go
-func Test(ctx context.Context) {
+import (
+    ...
+    "github.com/horm-database/go-horm/horm"
+    "github.com/horm-database/common/types"
+)
+
+func queryIsAllSuccess(ctx context.Context) {
+	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+
 	datas := []*Student{
 		{
-			ClassId: 1,
-			Sex:     "male",
-			Age:     22,
-			Name:    "smallhow",
+			Id:       1,
+			Identify: 2024061211,
+			Gender:   1,
+			Age:      19,
+			Name:     "caohao",
+			Score:    89.7,
+			Image:    []byte("IMAGE.PCG"),
+			Article:  "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+			ExamTime: "15:30:00",
+			Birthday: types.Time(birthday),
 		},
 		{
-			ClassId: 2,
-			Sex:     "female",
-			Age:     19,
-			Name:    "jerry",
+			Id:       2,
+			Identify: 2024070733,
+			Gender:   1,
+			Age:      17,
+			Name:     "jerry",
+			Score:    92.3,
+			Image:    []byte("IMAGE.PCG"),
+			Article:  "Design and analysis of algorithms and data structures",
+			ExamTime: "15:30:00",
+			Birthday: types.Time(birthday),
 		},
 	}
 
-	result := make([]*horm.EsResult, 0)
-	err := horm.NewQuery("es_student").InsertStructs(&datas).Exec(ctx, &result)
-
-	if horm.IsError(err) {
+	modRets := make([]*proto.ModRet, 0)
+	_, err := horm.NewQuery("es_student").Insert(&datas).Exec(ctx, &modRets)
+	if err != nil {
 		fmt.Printf("batch insert student error: %v", err)
 		return
 	}
 
-	if horm.IsAllSuccess(result) {
+	if horm.IsAllSuccess(modRets) {
 		fmt.Printf("batch insert success")
 		return
 	}
-	...
 }
+
 ```
 
 返回结果：
 ```json
 [
-    {
-        "_id":"wU3spIEBL4QnOSO-F-tV",
-        "version":1,
-        "rows_affected":1,
-        "status":0,
-        "reason":""
-    },
-    {
-        "_id":"wk3spIEBL4QnOSO-F-tV",
-        "version":1,
-        "rows_affected":1,
-        "status":0,
-        "reason":""
-    }
+  {
+    "id": "Ay7DApQBdHFFOkFBRxKQ",
+    "rows_affected": 1,
+    "version": 1,
+    "status": 0
+  },
+  {
+    "id": "BC7DApQBdHFFOkFBRxKQ",
+    "rows_affected": 1,
+    "version": 1,
+    "status": 0
+  }
 ]
+```
+
+ModRet 的结构体如下：
+```go
+// ModRet 新增/更新返回信息
+type ModRet struct {
+	ID          ID                     `orm:"id,omitempty" json:"id,omitempty"`                       // id 主键，可能是 mysql 的最后自增id，last_insert_id 或 elastic 的 _id 等，类型可能是 int64、string
+	RowAffected int64                  `orm:"rows_affected,omitempty" json:"rows_affected,omitempty"` // 影响行数
+	Version     int64                  `orm:"version,omitempty" json:"version,omitempty"`             // 数据版本
+	Status      int                    `orm:"status,omitempty" json:"status,omitempty"`               // 返回状态码
+	Reason      string                 `orm:"reason,omitempty" json:"reason,omitempty"`               // mod 失败原因
+	Extras      map[string]interface{} `orm:"extras,omitempty" json:"extras,omitempty"`               // 更多详细信息
+}
+```
+
+上面语句在 es 插入了两条数据，如下，我们可以看到 updated_at 和 created_at 的时间格式，在未指定 time_fmt 的情况下，时间会被编码成 
+RFC3339 格式，如果希望修改格式，可以指定 time_fmt，但是struct的接收字段类型必须是 types.Time，否则在 Find 的时候，Receive 解析会异常。
+```json
+GET /es_student/_search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+---------
+{
+  "took" : 2,
+  "timed_out" : false,
+  "_shards" : {
+    "total" : 1,
+    "successful" : 1,
+    "skipped" : 0,
+    "failed" : 0
+  },
+  "hits" : {
+    "total" : {
+      "value" : 2,
+      "relation" : "eq"
+    },
+    "max_score" : 1.0,
+    "hits" : [
+      {
+        "_index" : "es_student",
+        "_type" : "_doc",
+        "_id" : "Ay7DApQBdHFFOkFBRxKQ",
+        "_score" : 1.0,
+        "_source" : {
+          "age" : 19,
+          "article" : "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+          "birthday" : "1987-08-27",
+          "created_at" : "2024-12-26T19:38:59.750313+08:00",
+          "exam_time" : "15:30:00",
+          "gender" : 1,
+          "id" : 1,
+          "identify" : 2024061211,
+          "image" : "SU1BR0UuUENH",
+          "name" : "caohao",
+          "score" : 89.7,
+          "updated_at" : "2024-12-26T19:38:59.750316+08:00"
+        }
+      },
+      {
+        "_index" : "es_student",
+        "_type" : "_doc",
+        "_id" : "BC7DApQBdHFFOkFBRxKQ",
+        "_score" : 1.0,
+        "_source" : {
+          "age" : 17,
+          "article" : "Design and analysis of algorithms and data structures",
+          "birthday" : "1987-08-27",
+          "created_at" : "2024-12-26T19:38:59.750328+08:00",
+          "exam_time" : "15:30:00",
+          "gender" : 1,
+          "id" : 2,
+          "identify" : 2024070733,
+          "image" : "SU1BR0UuUENH",
+          "name" : "jerry",
+          "score" : 92.3,
+          "updated_at" : "2024-12-26T19:38:59.750331+08:00"
+        }
+      }
+    ]
+  }
+}
+
 ```
 
 

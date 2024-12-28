@@ -18,13 +18,12 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/horm-database/common/consts"
 	"github.com/horm-database/common/proto"
 	"github.com/horm-database/common/snowflake"
-	"github.com/horm-database/common/structspec"
+	"github.com/horm-database/common/structs"
 	"github.com/horm-database/common/types"
 )
 
@@ -34,6 +33,7 @@ type defaultCodec struct {
 	tag           string // the tag in the structure, use for encode and decode, if the tag does not exist, use the name of the structure as the field
 	omitEmpty     bool   // if open omit empty , default is true
 	map2structure *Map2Structure
+	l             *time.Location
 }
 
 type EncodeType int8
@@ -74,6 +74,14 @@ func (dc *defaultCodec) GetTag() string {
 	}
 
 	return dc.tag
+}
+
+func (dc *defaultCodec) SetLocation(l *time.Location) {
+	dc.l = l
+}
+
+func (dc *defaultCodec) GetLocation() *time.Location {
+	return dc.l
 }
 
 // Encode redis 将 golang object 编码成 redis 请求
@@ -348,7 +356,7 @@ func (dc *defaultCodec) Decode(typ consts.RetType, src interface{}, dest []inter
 func (dc *defaultCodec) setStruct(val interface{}, isInsert bool) map[string]interface{} {
 	v := reflect.Indirect(reflect.ValueOf(val))
 
-	ss := structspec.GetStructSpec(dc.GetTag(), v.Type())
+	ss := structs.GetStructSpec(dc.GetTag(), v.Type())
 
 	data := make(map[string]interface{})
 
@@ -358,7 +366,7 @@ func (dc *defaultCodec) setStruct(val interface{}, isInsert bool) map[string]int
 		}
 
 		iv := v.FieldByName(name)
-		isEmpty := types.IsEmptyValue(iv)
+		isEmpty := types.IsEmpty(iv)
 
 		if dc.omitEmpty && (fs.OmitEmpty ||
 			(isInsert && fs.OmitInsertEmpty) ||
@@ -368,7 +376,7 @@ func (dc *defaultCodec) setStruct(val interface{}, isInsert bool) map[string]int
 
 		//自动插入当前时间，仅在值为零值时才自动赋值
 		if (fs.OnCreateTime || fs.OnUpdateTime) && isEmpty {
-			data[fs.Column] = nowTime(fs.Type)
+			data[fs.Column] = dc.getFormatTimeOrData(nowTime(fs.Type), fs)
 		} else if fs.OnUniqueID && isInsert && isEmpty && iv.Kind() == reflect.Uint64 {
 			data[fs.Column] = snowflake.GenerateID()
 		} else {
@@ -387,7 +395,7 @@ func (dc *defaultCodec) setStructs(val interface{}, isInsert bool) []map[string]
 		return nil
 	}
 
-	ss := structspec.GetStructSpec(dc.GetTag(), reflect.Indirect(arrv.Index(0)).Type())
+	ss := structs.GetStructSpec(dc.GetTag(), reflect.Indirect(arrv.Index(0)).Type())
 
 	ignores := dc.getIgnores(ss, arrv, arrLen, isInsert)
 
@@ -406,11 +414,11 @@ func (dc *defaultCodec) setStructs(val interface{}, isInsert bool) []map[string]
 
 			if ignore := ignores[name]; !ignore {
 				iv := kv.FieldByName(name)
-				isEmpty := types.IsEmptyValue(iv)
+				isEmpty := types.IsEmpty(iv)
 
 				//自动插入当前时间，仅在值为零值时才自动赋值
 				if (fs.OnCreateTime || fs.OnUpdateTime) && isEmpty {
-					data[fs.Column] = nowTime(fs.Type)
+					data[fs.Column] = dc.getFormatTimeOrData(nowTime(fs.Type), fs)
 				} else if fs.OnUniqueID && isInsert && isEmpty && iv.Kind() == reflect.Uint64 {
 					data[fs.Column] = snowflake.GenerateID()
 				} else {
@@ -428,19 +436,19 @@ func (dc *defaultCodec) setStructs(val interface{}, isInsert bool) []map[string]
 func (dc *defaultCodec) updateStruct(val interface{}) map[string]interface{} {
 	v := reflect.Indirect(reflect.ValueOf(val))
 
-	ss := structspec.GetStructSpec(dc.GetTag(), v.Type())
+	ss := structs.GetStructSpec(dc.GetTag(), v.Type())
 
 	data := make(map[string]interface{})
 
 	for name, fs := range ss.M {
 		iv := v.FieldByName(name)
 
-		if dc.omitEmpty && (fs.OmitUpdateEmpty || fs.OmitEmpty) && types.IsEmptyValue(iv) { //UPDATE 忽略零值
+		if dc.omitEmpty && (fs.OmitUpdateEmpty || fs.OmitEmpty) && types.IsEmpty(iv) { //UPDATE 忽略零值
 			continue
 		}
 
-		if fs.OnUpdateTime && types.IsEmptyValue(iv) { //修改时自动赋值当前时间，仅在值为零值时才自动赋值
-			data[fs.Column] = nowTime(fs.Type)
+		if fs.OnUpdateTime && types.IsEmpty(iv) { //修改时自动赋值当前时间，仅在值为零值时才自动赋值
+			data[fs.Column] = dc.getFormatTimeOrData(nowTime(fs.Type), fs)
 		} else {
 			data[fs.Column] = dc.getValue(fs, iv)
 		}
@@ -449,14 +457,14 @@ func (dc *defaultCodec) updateStruct(val interface{}) map[string]interface{} {
 	return data
 }
 
-func (dc *defaultCodec) getValue(fs *structspec.FieldSpec, iv reflect.Value) interface{} {
+func (dc *defaultCodec) getValue(fs *structs.FieldSpec, iv reflect.Value) interface{} {
 	if !iv.CanInterface() {
 		return nil
 	}
 
 	data := iv.Interface()
 
-	if fs.Type == "json" {
+	if fs.Type == structs.TypeJSON {
 		switch data.(type) {
 		case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64,
 			float32, float64, string, []byte, *bool, *int, *int8, *int16, *int32, *int64,
@@ -467,12 +475,23 @@ func (dc *defaultCodec) getValue(fs *structspec.FieldSpec, iv reflect.Value) int
 			return ret
 		}
 	} else {
-		return data
+		return dc.getFormatTimeOrData(data, fs)
 	}
 }
 
+func (dc *defaultCodec) getFormatTimeOrData(data interface{}, fs *structs.FieldSpec) interface{} {
+	if fs.TimeFmt != "" {
+		t, ok := types.GetRealTime(reflect.ValueOf(data))
+		if ok {
+			return t.Format(fs.TimeFmt)
+		}
+	}
+
+	return data
+}
+
 // getIgnores 获取忽略字段
-func (dc *defaultCodec) getIgnores(ss *structspec.StructSpec,
+func (dc *defaultCodec) getIgnores(ss *structs.StructSpec,
 	arrv reflect.Value, arrLen int, isInsert bool) map[string]bool {
 	//获取忽略字段
 	ignores := map[string]bool{}
@@ -490,7 +509,7 @@ func (dc *defaultCodec) getIgnores(ss *structspec.StructSpec,
 		for name := range ss.M {
 			if ignore := ignores[name]; ignore {
 				iv := kv.FieldByName(name)
-				if !types.IsEmptyValue(iv) { // 存在非空值，则该字段不忽略
+				if !types.IsEmpty(iv) { // 存在非空值，则该字段不忽略
 					ignores[name] = false
 				}
 			}
@@ -500,11 +519,12 @@ func (dc *defaultCodec) getIgnores(ss *structspec.StructSpec,
 	return ignores
 }
 
-func nowTime(typ string) interface{} {
-	typ = strings.ToUpper(typ)
-	if typ == "int" || typ == "int32" || typ == "int64" ||
-		typ == "uint" || typ == "uint32" || typ == "uint64" {
+func nowTime(typ structs.Type) interface{} {
+	switch typ {
+	case structs.TypeInt, structs.TypeInt32, structs.TypeInt64,
+		structs.TypeUint, structs.TypeUint32, structs.TypeUint64:
 		return time.Now().Unix()
+	default:
+		return time.Now()
 	}
-	return time.Now()
 }

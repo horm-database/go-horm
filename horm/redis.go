@@ -20,6 +20,7 @@ import (
 	redigo "github.com/gomodule/redigo/redis"
 	"github.com/horm-database/common/consts"
 	"github.com/horm-database/common/errs"
+	"github.com/horm-database/common/structs"
 	"github.com/horm-database/go-horm/horm/codec"
 )
 
@@ -849,7 +850,7 @@ func (s *Query) append(items ...interface{}) *Query {
 	coder := s.GetCoder()
 
 	if len(s.Unit.DataType) == 0 {
-		s.Unit.DataType = make(map[string]consts.DataType)
+		s.Unit.DataType = make(map[string]structs.Type)
 	}
 
 	for k, item := range items {
@@ -862,7 +863,7 @@ func (s *Query) append(items ...interface{}) *Query {
 		s.Unit.Args = append(s.Unit.Args, mv)
 
 		typ := consts.GetDataType(mv)
-		if typ != consts.DataTypeOther {
+		if typ != 0 {
 			s.Unit.DataType[strconv.Itoa(k)] = typ
 		}
 	}
