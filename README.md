@@ -175,10 +175,9 @@ type FieldSpec struct {
 一、为Query语句指定特定的客户端。二、配置全局客户端，在未指定特定客户端的情况下，所有 Query 都采用该全局客户端。
 
 ## 指定客户端
-我们首先通过 horm.NewClient 创建一个客户端，该函数的第一个参数是允许传入一个 caller name，
-他将读取配置文件 orm.yaml 里面的 server.caller.name 对应的数据统一接入服务 workspace_id、 encryption、token、target、appid、secret等信息，
-然后用 WithClient 为 Query 指定该 Client。
-我们可能会访问多个数据统一接入服务的不同数据（每个服务都有唯一的 workspace id）。
+我们首先通过 horm.NewClient 创建一个客户端，该函数的第一个参数是允许传入一个 caller name， 他将读取配置文件 orm.yaml 里面的 
+server.caller.name 对应的数据统一接入服务 workspace_id、 encryption、token、target、appid、secret等信息， 然后用 WithClient 为
+Query 指定该 Client。 我们可能会访问多个数据统一接入服务的不同数据（每个服务都有唯一的 workspace id）。
 
 ```go
 import (
@@ -396,9 +395,8 @@ type Join struct {
 ```
 
 ## 数据类型
-执行单元中的 data、datas、args 等数据参数，包含的数据类型如下： 
+执行单元中的 data、datas、args 等数据参数，可以包含如下一些基础数据类型下：
 ```go
-//github.com/horm-database/common/structs/type.go
 package structs
 
 type Type int8
@@ -406,18 +404,18 @@ type Type int8
 const (
 	TypeTime   Type = 1 // 类型是 time.Time
 	TypeBytes  Type = 2 // 类型是 []byte
-	TypeInt    Type = 3
-	TypeInt8   Type = 4
-	TypeInt16  Type = 5
-	TypeInt32  Type = 6
-	TypeInt64  Type = 7
-	TypeUint   Type = 8
-	TypeUint8  Type = 9
-	TypeUint16 Type = 10
-	TypeUint32 Type = 11
-	TypeUint64 Type = 12
-	TypeFloat  Type = 13
-	TypeDouble Type = 14
+	TypeFloat  Type = 3
+	TypeDouble Type = 4
+	TypeInt    Type = 5
+	TypeUint   Type = 6
+	TypeInt8   Type = 7
+	TypeInt16  Type = 8
+	TypeInt32  Type = 9
+	TypeInt64  Type = 10
+	TypeUint8  Type = 11
+	TypeUint16 Type = 12
+	TypeUint32 Type = 13
+	TypeUint64 Type = 14
 	TypeString Type = 15
 	TypeBool   Type = 16
 	TypeJSON   Type = 17
@@ -426,28 +424,29 @@ const (
 var TypeDesc = map[string]Type{
 	"time":   TypeTime,
 	"bytes":  TypeBytes,
+	"float":  TypeFloat,
+	"double": TypeDouble,
 	"int":    TypeInt,
+	"uint":   TypeUint,
 	"int8":   TypeInt8,
 	"int16":  TypeInt16,
 	"int32":  TypeInt32,
 	"int64":  TypeInt64,
-	"uint":   TypeUint,
 	"uint8":  TypeUint8,
 	"uint16": TypeUint16,
 	"uint32": TypeUint32,
 	"uint64": TypeUint64,
-	"float":  TypeFloat,
-	"double": TypeDouble,
 	"string": TypeString,
 	"bool":   TypeBool,
 	"json":   TypeJSON,
 }
+
 ```
 
-我们发送请求到数据统一调度服务的时候，默认情况下可以不指定数据类型，但是在某些情况下，比如 clickhouse 对类型有强限制，需要指定具体的类型，
-又或者一个超大的 uint64 整数，json.Marshal 编码之后请求服务端，由于 json 的基础类型只包含 string、number(当成float64)、bool 在服务端
-会被转化为 float64，存在精度丢失问题， 所以当类型为 time、[]byte、int、int8~int64、uint、uint8~uint64 时，需要在执行单元 data_type 
-字段里将数据类型带上，当然在 golang horm 中，sdk 里面会自动帮我们处理，如下案例：
+我们发送请求到数据统一调度服务的时候，绝大多数情况下可以不指定数据类型，服务端也可以正常解析并执行 query 语句，但是在某些特殊情况下，
+比如 clickhouse 对类型有强限制，又或者字段是一个超大 uint64 整数，json 编码之后请求服务端，由于 json 的基础类型只包含 string、 
+number(当成float64)、bool，数字在服务端会被解析为 float64，存在精度丢失问题，所以在 golang horm 中，当类型为 time、[]byte、
+int、 int8~int64、uint、uint8~uint64 时，需要在执行单元 data_type 字段里将数据类型带上，当然 horm-sdk 会自动帮我们处理，如下案例：
 
 ```go
 import (
@@ -480,33 +479,35 @@ func queryDataType(ctx context.Context) {
 ```
 上面代码生成的 json 请求为：
 ```json
-{
-  "name": "student",
-  "op": "insert",
-  "data": {
-    "article": "Artificial Intelligence",
-    "exam_time": "15:30:00",
-    "created_at": "2024-12-28T12:51:52.846304+08:00",
-    "name": "kitty",
-    "image": "SU1BR0UuUENH",
-    "identify": 2024080313,
-    "gender": 2,
-    "score": 91.5,
-    "birthday": "1987-08-27",
-    "age": 23,
-    "updated_at": "2024-12-28T12:51:52.846305+08:00",
-    "id": 231035320542441473
-  },
-  "data_type": {
-    "identify": 7,
-    "gender": 4,
-    "created_at": 1,
-    "updated_at": 1,
-    "id": 12,
-    "age": 8,
-    "image": 2
+[
+  {
+    "name": "student(add)",
+    "op": "insert",
+    "data": {
+      "created_at": "2024-12-28T19:47:05.056251+08:00",
+      "updated_at": "2024-12-28T19:47:05.056229+08:00",
+      "name": "kitty",
+      "score": 91.5,
+      "image": "SU1BR0UuUENH",
+      "exam_time": "15:30:00",
+      "gender": 2,
+      "id": 231139809924493313,
+      "birthday": "1987-08-27",
+      "identify": 2024080313,
+      "age": 23,
+      "article": "Artificial Intelligence"
+    },
+    "data_type": {
+      "identify": 10,
+      "age": 6,
+      "id": 14,
+      "image": 2,
+      "gender": 7,
+      "created_at": 1,
+      "updated_at": 1
+    }
   }
-}
+]
 ```
 
 horm 基础类型，会在数据统一接入服务根据指定的数据源引擎映射、解析成对应的类型在 mysql 和 clickhouse 类型映射为：
