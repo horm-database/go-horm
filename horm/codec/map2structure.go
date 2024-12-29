@@ -18,7 +18,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/araddon/dateparse"
 	"github.com/horm-database/common/codec/mapstructure"
 	"github.com/horm-database/common/types"
 )
@@ -41,19 +40,7 @@ func (m *Map2Structure) Decode(src, dest interface{}) error {
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			func(str reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
 				if str == typeString && types.IsTime(t) {
-					var tt time.Time
-					var err error
-
-					if m.l == nil {
-						tt, err = dateparse.ParseAny(data.(string))
-					} else {
-						tt, err = dateparse.ParseIn(data.(string), m.l)
-					}
-
-					if err != nil {
-						return nil, err
-					}
-
+					tt, err := types.ParseTime(data.(string), "", m.l)
 					return reflect.ValueOf(tt).Convert(t).Interface(), err
 				}
 

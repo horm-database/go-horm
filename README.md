@@ -394,7 +394,7 @@ type Join struct {
 }
 ```
 
-## 数据类型
+## 基础数据类型
 执行单元中的 data、datas、args 等数据参数，可以包含如下一些基础数据类型下：
 ```go
 package structs
@@ -510,7 +510,7 @@ func queryDataType(ctx context.Context) {
 ]
 ```
 
-horm 基础类型，会在数据统一接入服务根据指定的数据源引擎映射、解析成对应的类型在 mysql 和 clickhouse 类型映射为：
+horm 基础类型，会在数据统一接入服务根据指定的数据源引擎映射、解析成对应的类型，例如在 mysql 和 clickhouse 类型映射为：
 ```go
 //github.com/orm/database/sql/type.go
 
@@ -825,7 +825,7 @@ func queryModeParallel(ctx context.Context) {
 
 ![image](https://github.com/horm-database/image/blob/master/4-2.png)
 
-### 引用（同层级）
+### 引用
 引用是指的一个查询单元的请求参数来自另外一个查询的返回结果，当出现引用的时候，并行执行会退化为串行执行。引用有多种方式，
 如下 horm.Where{"@identify": "student.identify"} 中 map 的 key 以`@`开头的时候，表示 identify 的值引用自 student 执行单元
 的返回结果的 identify 字段。`.` 之前表示引用路径，之后表示引用的 field， 被引用的执行单元必须在引用的执行单元之前被执行，否则就会报错。
@@ -1183,12 +1183,12 @@ func queryReturnNil(ctx context.Context) {
 
 	// redis 中 GET 缓存
 	var stu Student
-	isNil, err = horm.NewQuery("student_redis").Get("noexists").Exec(ctx, &stu) // isNil = true
+	isNil, err = horm.NewQuery("redis_student").Get("noexists").Exec(ctx, &stu) // isNil = true
 
 	// redis 中 ZRANGEBYSCORE
 	rets := make([]*Student, 0)
 	scores := make([]float64, 0)
-	isNil, err = horm.NewQuery("student_redis"). // isNil = false ， rets 和 scores 为空数组
+	isNil, err = horm.NewQuery("redis_student"). // isNil = false ， rets 和 scores 为空数组
 							ZRangeByScore("noexists", 70, 100, true).Exec(ctx, &rets, &scores)
 
 	fmt.Println(isNil, err)
@@ -1219,7 +1219,7 @@ message ResponseHeader {
 ```
 
 ```go
-func queryReturnError2(ctx context.Context) {
+func queryReturnError(ctx context.Context) {
 	data := map[string]interface{}{
 		"no_field": nil,
 	}
@@ -1280,9 +1280,9 @@ const (
 ```
 
 ### IsAllSuccess
-这个函数仅用于 Elastic 批量插入新数据时候，返回 `[]*proto.ModRet`，可以用 IsAllSuccess 去判断数据是否全部插入成功，
-当只有部分成功的时候，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因，
-这样，我们可以针对失败的记录做特殊处理，比如重试。
+这个函数仅用于 Elastic 批量插入新数据时候，返回 `[]*proto.ModRet`，可以用 IsAllSuccess 去判断数据是否全部插入成功，当只有部分成功
+的时候，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因，这样，我们可以针对失败的记录
+做特殊处理，比如重试。
 ```go
 import (
     ...
