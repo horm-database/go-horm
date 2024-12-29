@@ -481,7 +481,7 @@ func (dc *defaultCodec) getValue(fs *structs.FieldSpec, iv reflect.Value) interf
 
 func (dc *defaultCodec) getFormatTimeOrData(data interface{}, fs *structs.FieldSpec) interface{} {
 	if fs.TimeFmt != "" {
-		t, ok := types.GetRealTime(reflect.ValueOf(data))
+		t, ok := types.GetRealTime(data)
 		if ok {
 			return t.Format(fs.TimeFmt)
 		}
