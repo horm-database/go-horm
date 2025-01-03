@@ -40,7 +40,7 @@ func (m *Map2Structure) Decode(src, dest interface{}) error {
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			func(str reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
 				if str == typeString && types.IsTime(t) {
-					tt, err := types.ParseTime(data.(string), "", m.l)
+					tt, err := types.ParseTime(data.(string), m.l)
 					return reflect.ValueOf(tt).Convert(t).Interface(), err
 				}
 

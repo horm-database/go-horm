@@ -128,7 +128,7 @@ type ScoreRankReward struct {
 ```
 
 ## 结构体标签
-支持通过 golang 结构体标签来描述数据库表字段，标签以 orm 开头，第一个 field 为表字段名，第二个 field 为表类型，其他为属性，例如：
+支持通过 golang 结构体标签来描述数据库表字段，标签以 orm 开头，第一个参数为执行单元名，第二个参数为 orm 字段类型，其他为属性，例如：
 ```golang
 //示例结构体
 type Student struct {
@@ -146,9 +146,9 @@ type Student struct {
   UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //onupdatetime 自动修改为当前时间
 }
 ```
+horm 会将上面结构体的 orm 标签解析后，每个字段的属性存入下面的结构体中，并缓存到内存：
 
 ```go
-//horm 会将上面结构体的 orm 标签解析后，每个 field 结果存入下面的结构体中，并缓存到内存
 // FieldSpec body 标签解析结果
 type FieldSpec struct {
   Tag              string // tag
@@ -168,7 +168,28 @@ type FieldSpec struct {
 }
 
 ```
-
+orm 字段类型包含如下类型，具体细节可以看后面章节 `基础数据类型`：
+```go
+var TypeDesc = map[string]Type{
+	"time":   TypeTime,
+	"bytes":  TypeBytes,
+	"float":  TypeFloat,
+	"double": TypeDouble,
+	"int":    TypeInt,
+	"uint":   TypeUint,
+	"int8":   TypeInt8,
+	"int16":  TypeInt16,
+	"int32":  TypeInt32,
+	"int64":  TypeInt64,
+	"uint8":  TypeUint8,
+	"uint16": TypeUint16,
+	"uint32": TypeUint32,
+	"uint64": TypeUint64,
+	"string": TypeString,
+	"bool":   TypeBool,
+	"json":   TypeJSON,
+}
+```
 
 # horm 客户端
 为了访问数据统一接入服务，我们需要创建 Client 来与服务端建立连接，horm 提供了2种方式来指定 Query 语句使用的客户端。
@@ -1279,9 +1300,8 @@ const (
 )
 ```
 
-### IsAllSuccess
-这个函数仅用于 Elastic 批量插入新数据时候，返回 `[]*proto.ModRet`，可以用 IsAllSuccess 去判断数据是否全部插入成功，当只有部分成功
-的时候，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因，这样，我们可以针对失败的记录
+### 全部成功
+这个函数仅用于 Elastic 批量插入新数据时，返回 `[]*proto.ModRet`，可以用 IsAllSuccess 去判断数据是否全部插入成功，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因，这样，我们可以针对失败的记录
 做特殊处理，比如重试。
 ```go
 import (
@@ -1437,7 +1457,6 @@ GET /es_student/_search
 }
 
 ```
-
 
 # 查询语句
 ## 指定查询列
