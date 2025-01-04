@@ -1524,7 +1524,7 @@ SQL语句：
 }
 ```
 
-## 主键搜索（elastic 则是 _id ）
+## 主键查询（elastic 则是 _id ）
 - 示例1 mysql 主键查询：
 ```go
 func queryFindBy(ctx context.Context) {
@@ -1905,39 +1905,41 @@ func queryCompWhere3(ctx context.Context) {
 }
 ```
 ### 模糊匹配
-注意：在 elastic 中 LIKE 操作符用法有些不同，详细可以看下一个章节。
+注意：在 elastic 中 LIKE 操作符用法有些不同，详细可以看下一节。
 - 示例1：
 ```go
-func Test(ctx context.Context) {
+func queryLike(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["name ~"] = "%ide%"                              //`name` LIKE '%ide%'
-	where["addtime ~"] = []string{"2019-08%", "2020-01%"}  //( `addtime` LIKE '2019-08%' OR `addtime` LIKE '2020-01%')
-	where["name !~"] = "%ide%"                             //`name` NOT LIKE '%ide%'
-	where["addtime !~"] = []string{"2019-08%", "2020-01%"} //( `addtime` NOT LIKE '2019-08%' AND `addtime` NOT LIKE '2020-01%')  ## 注意他和 LIKE 的连接词不一样，NOT LIKE 是 AND，而 LIKE 是 OR
+	where["name ~"] = "%cao%"                               // `name` LIKE '%cao%'
+	where["birthday ~"] = []string{"2019-08%", "2020-01%"}  // (`birthday` LIKE '2019-08%' OR `birthday` LIKE '2020-01%')
+	where["name !~"] = "%cao%"                              // `name` NOT LIKE '%cao%'
+	where["birthday !~"] = []string{"2019-08%", "2020-01%"} // (`birthday` NOT LIKE '2019-08%' AND `birthday` NOT LIKE '2020-01%')  ## 注意他和 LIKE 的连接词不一样，NOT LIKE 是 AND，而 LIKE 是 OR
 
-	err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
-	...
+	isNil, err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+
+	fmt.Println(isNil, err)
 }
 ```
 - 示例2：
 ```go
-func Test(ctx context.Context) {
+func queryLike2(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
 	where["name ~"] = "Londo_"   // London, Londox, Londos...
 	where["name ~"] = "[BCR]at"  // Bat, Cat, Rat
 	where["name ~"] = "[!BCR]at" // Eat, Fat, Hat...
-	
-	err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+
+	isNil, err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
 
 ### 部分匹配（prefix、wildcard、regexp）（elastic 特有）
-对于 elastic ，horm 把 `~` 操作符用于表示部分匹配。部分匹配分3中类型，prefix（默认）、wildcard、regexp
+在 elastic 中，`~` 操作符表示部分匹配。部分匹配分3种类型，prefix（默认）、wildcard、regexp
 
 #### prefix 前缀查询（默认）
 类似 mysql 的 like 'cao%'，以 cao 为前缀的所有内容。

@@ -396,7 +396,7 @@ func (s *Query) structToMap(data interface{}) (ret interface{}) {
 		if err == nil {
 			return d
 		}
+	default:
 	}
-
 	return data
 }

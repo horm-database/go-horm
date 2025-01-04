@@ -382,6 +382,10 @@ func (dc *defaultCodec) setStruct(val interface{}, isInsert bool) map[string]int
 		} else {
 			data[fs.Column] = dc.getValue(fs, iv)
 		}
+
+		if fs.EsID {
+			data["_id"] = data[fs.Column]
+		}
 	}
 
 	return data
@@ -423,6 +427,10 @@ func (dc *defaultCodec) setStructs(val interface{}, isInsert bool) []map[string]
 					data[fs.Column] = snowflake.GenerateID()
 				} else {
 					data[fs.Column] = dc.getValue(fs, iv)
+				}
+
+				if fs.EsID {
+					data["_id"] = data[fs.Column]
 				}
 			}
 		}
