@@ -1311,7 +1311,7 @@ import (
     "github.com/horm-database/common/types"
 )
 
-func queryIsAllSuccess(ctx context.Context) {
+func isAllSuccess(ctx context.Context) {
 	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
 
 	datas := []*Student{
@@ -1589,10 +1589,7 @@ type Student struct {
   UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //修改时间
 }
 
-```
-
-```go
-func queryInsertEsByID(ctx context.Context) {
+func insertEsByID(ctx context.Context) {
 	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
 
 	datas := []*Student{
@@ -1652,7 +1649,7 @@ func queryInsertEsByID(ctx context.Context) {
 
 也可以直接在 Student 结构体加个 `_id` 字段。作为主键，还可以如下在 `ID()` 里面加主键：
 ```go
-func queryInsertEsByID2(ctx context.Context) {
+func insertEsByID2(ctx context.Context) {
 	...
 
 	datas := []*Student{
@@ -1697,73 +1694,58 @@ func queryByID(ctx context.Context) {
 
 ## where 查询条件
 ### 操作符
-```
+```go
 const ( // 操作符
-	OPEqual          = "="  // 等于
-	OPBetween        = "()" // 在某个区间
-	OPNotBetween     = "><" // 不在某个区间
-	OPGt             = ">"  // 大于
-	OPGte            = ">=" // 大于等于
-	OPLt             = "<"  // 小于
-	OPLte            = "<=" // 小于等于
-	OPNot            = "!"  // 去反
-	OPLike           = "~"  // like语句，（或 es 的部分匹配）
-	OPNotLike        = "!~" // not like 语句，（或 es 的部分匹配排除）
-	OPMatchPhrase    = "?"  // es 短语匹配 match_phrase
-	OPNotMatchPhrase = "!?" // es 短语匹配排除 must_not match_phrase
-	OPMatch          = "*"  // es 全文搜索 match 语句
-	OPNotMatch       = "!*" // es 全文搜索排除 must_not match
+	OPEqual          = "="   // 等于
+	OPBetween        = "()"  // 在某个区间
+	OPNotBetween     = "!()" // 不在某个区间
+	OPGt             = ">"   // 大于
+	OPGte            = ">="  // 大于等于
+	OPLt             = "<"   // 小于
+	OPLte            = "<="  // 小于等于
+	OPNot            = "!"   // 去反
+	OPLike           = "~"   // like语句，（或 es 的部分匹配）
+	OPNotLike        = "!~"  // not like 语句，（或 es 的部分匹配排除）
+	OPMatchPhrase    = "?"   // es 短语匹配 match_phrase
+	OPNotMatchPhrase = "!?"  // es 短语匹配排除 must_not match_phrase
+	OPMatch          = "*"   // es 全文搜索 match 语句
+	OPNotMatch       = "!*"  // es 全文搜索排除 must_not match
 )
 ```
 
 ### 基础用法
-由于篇幅问题，下面所有用法都是用 mysql 举例，如果对应库类型为 elastic 则 DB Proxy 会生成对应的 es 请求。
+由于篇幅问题，下面所有用法都是用 mysql 举例，如果对应库类型为 elastic 则数据统一接入服务会生成对应的 es 请求。
 ```go
-func Test(ctx context.Context) {
-	result := make([]*Student, 0)
+func queryWhere(ctx context.Context) {
+	var result = []*Student{}
 
 	where := horm.Where{}
-	where["age"] = 29                    //`age` = 29
-	where["age >"] = 29                  //`age` > 29
-	where["age >="] = 29                 //`age` >= 29
-	where["age !"] = 29                  //`age` != 29
-	where["age ()"] = []int{20, 29}      //`age` BETWEEN 20 AND 29
-	where["age ><"] = []int{35, 40}      // NOT ( `age` BETWEEN 35 AND 40)
-	where["score"] = []int{60, 61, 62}   //`score` IN (60, 61, 62)
-	where["score !"] = []int{70, 71, 72} //`score` NOT IN (70, 71, 72)
-	where["name"] = nil                  //`name` IS NULL
-	where["name !"] = nil                //`name` IS NOT NULL
-	where["name ! #注释：排除smallhow"] = "smallhow"                //`name` != 'smallhow'
+	where["age"] = 29                           //`age` = 29
+	where["age >"] = 29                         //`age` > 29
+	where["age <="] = 39                        //`age` <= 29
+	where["age !"] = 29                         //`age` != 29
+	where["age ()"] = []int{20, 29}             //`age` BETWEEN 20 AND 29
+	where["age !()"] = []int{35, 40}            // NOT ( `age` BETWEEN 35 AND 40)
+	where["score"] = []int{60, 61, 62}          //`score` IN (60, 61, 62)
+	where["score !"] = []int{70, 71, 72}        //`score` NOT IN (70, 71, 72)
+	where["name"] = nil                         //`name` IS NULL
+	where["name !"] = nil                       //`name` IS NOT NULL
+	where["name ! #注释：排除smallhow"] = "smallhow" //`name` != 'smallhow'
 
-	err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
-
-	if horm.IsError(err) { // 判断是否执行失败，如果是 nil returned 错误，不是真正的错误，而是空数据。
-		fmt.Printf("find student error: %v", err)
-		return
-	}
-
-	if horm.IsNil(err) { // err = nil returned，所有返回空数据都报这个错误。
-		fmt.Printf("not fine student")
-	}
+	isNil, err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+	
+	...
 }
 ```
 
-FindOne 查询单条记录：
+Find 查询单条记录：
 ```go
-func Test(ctx context.Context) {
-	result := Student{}
-	
-	where := horm.Where{"userid": 399883}
-	err := horm.NewQuery("student").FindOne(where).Exec(ctx, &result)
+func queryFind(ctx context.Context) {
+	var result = Student{}
+	where := horm.Where{"identify": 2024061211}
+	isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result)
 
-	if horm.IsError(err) { // 判断是否执行失败，如果是 nil returned 错误，不是真正的错误，而是空数据。
-		fmt.Printf("find student error: %v", err)
-		return
-	}
-
-	if horm.IsNil(err) { // err = nil returned。
-		fmt.Printf("not fine student userid=399883")
-	}
+	...
 }
 ```
 
@@ -1772,125 +1754,153 @@ func Test(ctx context.Context) {
 
 - 示例1：
 ```go
-func Test(ctx context.Context) {
-	result := make([]*Student, 0)
+func queryCompWhere(ctx context.Context) {
+	var result = []*Student{}
 
 	var where = horm.Where{
-		"age":     36,
-		"score >": 97,
+		"age >":   18,
+		"score >": 85,
 		"OR": horm.Where{
-			"id ()": []int{10, 25},
-			"sex":   "male",
+			"id ()":  []int{1, 100},
+			"gender": 1,
 		},
 	}
+
+	isNil, err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+
+	//不设置 limit 时默认取100条
+	// SELECT * FROM `student` WHERE  `age` > 18 AND `score` > 85  AND (( `id`  BETWEEN 1 AND 100)  OR `gender` = 1)  LIMIT 100
 	
-	err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
-	
-	//不设置 limit 默认取100条
-	// SELECT * FROM `student` WHERE `age` = 36 AND `score` > 97 AND ((`id` BETWEEN 10 AND 25) OR `sex` = 'male')  LIMIT 100
 	...
 }
 ```
 上述语句如果转化为 elastic search 的 query 条件语句，则为（es 占用篇幅较大，后面都以 MySQL 为例）：
 ```json
 {
-    "bool":{
-        "filter":[
-            {
-                "terms":{
-                    "age":[
-                        36
-                    ]
+  "from": 0,
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "bool": {
+            "should": [
+              {
+                "range": {
+                  "id": {
+                    "from": 1,
+                    "include_lower": true,
+                    "include_upper": true,
+                    "to": 100
+                  }
                 }
-            },
-            {
-                "range":{
-                    "score":{
-                        "from":97,
-                        "include_lower":false,
-                        "include_upper":true,
-                        "to":null
-                    }
+              },
+              {
+                "terms": {
+                  "gender": [
+                    1
+                  ]
                 }
-            },
-            {
-                "bool":{
-                    "should":[
-                        {
-                            "range":{
-                                "id":{
-                                    "from":10,
-                                    "include_lower":true,
-                                    "include_upper":true,
-                                    "to":25
-                                }
-                            }
-                        },
-                        {
-                            "terms":{
-                                "sex":[
-                                    "male"
-                                ]
-                            }
-                        }
-                    ]
-                }
+              }
+            ]
+          }
+        },
+        {
+          "range": {
+            "age": {
+              "from": 18,
+              "include_lower": false,
+              "include_upper": true,
+              "to": null
             }
-        ]
+          }
+        },
+        {
+          "range": {
+            "score": {
+              "from": 85,
+              "include_lower": false,
+              "include_upper": true,
+              "to": null
+            }
+          }
+        }
+      ]
     }
+  },
+  "size": 100
 }
 ```
-- 示例2：
+- 示例2（注释）：
 ```go
-func Test(ctx context.Context) {
+func queryCompWhere2(ctx context.Context) {
 	result := make([]*Student, 0)
 
-	//注意：由于mysql使用map参数，所以在下面的情况下，第一个 OR 会被覆盖。
+	//注意：由于horm.Where是map参数，所以在下面的情况下，第一个 OR 会被覆盖。
 	where := horm.Where{
 		"OR": horm.Where{
-			"id >": 3,
-			"sex":  "male",
+			"id >":   3,
+			"gender": 1,
 		},
 		"OR": horm.Where{
-			"uid !":     3,
-			"height >=": 170,
+			"identify !": 0,
+			"age >=":     20,
 		},
 	}
 
-	// [X] SELECT * FROM `student` WHERE (`uid`!=3 OR `height`>=170)
-	
-	where := horm.Where{
+	// [X] SELECT * FROM `student` WHERE (`identify`!=0 OR `age`>=20)
+
+	where = horm.Where{
 		"OR #注释1": horm.Where{
-			"id >": 3,
-			"sex":  "male",
+			"id >":   3,
+			"gender": 1,
 		},
 		"OR #注释2": horm.Where{
-			"uid !":     3,
-			"height >=": 170,
+			"identify !": 0,
+			"age >=":     20,
 		},
 	}
 
-	// [√] SELECT * FROM `student` WHERE (`id`>3 OR `sex`='male') AND (`uid`!= 3 OR `height`>=170) LIMIT 100
+	// [√]  SELECT * FROM `student` WHERE (`id` > 3  OR `gender` = 1)  AND (`identify` != 0 OR `age` >= 20) LIMIT 100
 
-	err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+	where = horm.Where{
+		"OR": horm.Where{
+			"article ~ #1": "%computer%",
+			"article ~ #2": "%medical%",
+			"article ~ #3": "%physic%",
+		},
+	}
+
+	// [√]  SELECT * FROM `student` WHERE  (`article` LIKE '%computer%' OR `article` LIKE '%medical%' OR `article` LIKE '%physic%')  LIMIT 100
+
+	// 上面 like 等同于
+	where = horm.Where{
+		"article ~": []string{
+			"%computer%",
+			"%medical%",
+			"%physic%",
+		}}
+	
+	isNil, err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
 - 示例3
 ```go
-func Test(ctx context.Context) {
+func queryCompWhere3(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	where := horm.Where{
 		"NOT": horm.Where{
-			"id >": 3,
-			"sex":  "male",
+			"id >":   3,
+			"gender": 1,
 		},
 	}
 
-	// SELECT * FROM `student` WHERE NOT (`id` > 3 AND `sex` = 'male') LIMIT 100
+	// SELECT * FROM `student` WHERE NOT (`id` > 3 AND `gender` = 1)  LIMIT 100
 
-	err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
