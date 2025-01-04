@@ -1456,7 +1456,6 @@ GET /es_student/_search
     ]
   }
 }
-
 ```
 
 # 查询语句
@@ -1464,23 +1463,60 @@ GET /es_student/_search
 通过 `Column` 指定要查询的列。
 示例1：
 ```go
-func Test(ctx context.Context) {
-	result := make([]*Student, 0)
-	err := horm.NewQuery("student").Column("userid", "class_id", "created_at").FindAll().Exec(ctx, &result)
+func querySpecifiedColumn(ctx context.Context) {
+	var result = []map[string]interface{}{}
+	isNil, err := horm.NewQuery("student").
+		Column("identify", "gender", "age", "name").FindAll().Exec(ctx, &result)
+
+	...
 }
+```
+```sql
+ SELECT `identify` , `gender` , `age` , `name`  FROM `student`
+```
+返回结果：
+```json
+[
+  {
+    "identify": 2024061211,
+    "name": "caohao",
+    "gender": 1,
+    "age": 19
+  },
+  {
+    "identify": 2024070733,
+    "name": "jerry",
+    "gender": 1,
+    "age": 17
+  },
+  {
+    "identify": 2024080313,
+    "name": "kitty",
+    "gender": 2,
+    "age": 23
+  }
+]
 ```
 
 示例2：
 ```go
-func Test(ctx context.Context) {
-	result := make([]map[string]interface{}, 0)
-	err := horm.NewQuery("student").
-		Column("userid as id, max(age) as max_age").
-		GroupBy("userid").FindAll().Exec(ctx, &result)
+func querySpecifiedColumn2(ctx context.Context) {
+	var result = map[string]interface{}{}
+	isNil, err := horm.NewQuery("student").
+		Column("count(1) as cnt", "avg(age) as age", "sum(score) as score").Find().Exec(ctx, &result)
 
-	if horm.IsNil(err) {
-		fmt.Println("not fine student")
-	}
+	...
+}
+```
+```sql
+ SELECT  count(1) as cnt , avg(age) as age , sum(score) as score  FROM `student` LIMIT 1
+```
+返回结果：
+```json
+{
+    "cnt": 5,
+    "age": 21,
+    "score": 456.5
 }
 ```
 

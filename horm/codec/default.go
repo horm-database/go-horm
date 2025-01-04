@@ -360,12 +360,12 @@ func (dc *defaultCodec) setStruct(val interface{}, isInsert bool) map[string]int
 
 	data := make(map[string]interface{})
 
-	for name, fs := range ss.M {
+	for _, fs := range ss.M {
 		if fs.Tag != "orm" {
 			continue
 		}
 
-		iv := v.FieldByName(name)
+		iv := v.Field(fs.I)
 		isEmpty := types.IsEmpty(iv)
 
 		if dc.omitEmpty && (fs.OmitEmpty ||
@@ -413,7 +413,7 @@ func (dc *defaultCodec) setStructs(val interface{}, isInsert bool) []map[string]
 			}
 
 			if ignore := ignores[name]; !ignore {
-				iv := kv.FieldByName(name)
+				iv := kv.Field(fs.I)
 				isEmpty := types.IsEmpty(iv)
 
 				//自动插入当前时间，仅在值为零值时才自动赋值

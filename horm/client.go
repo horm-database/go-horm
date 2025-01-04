@@ -84,7 +84,7 @@ func (o *cli) Exec(ctx context.Context, q *Query, retReceiver ...interface{}) (i
 	err = q.GetCoder().Decode(q.ResultType, result, retReceiver)
 	if err != nil {
 		return false, errs.Newf(errs.ErrClientDecode, "[request_id=%d] %v, result=[%s]",
-			q.RequestID, err, types.InterfaceToString(result))
+			q.RequestID, err, types.ToString(result))
 	}
 
 	return header.IsNil, nil
@@ -137,7 +137,7 @@ func (o *cli) PExec(ctx context.Context, q *Query) error {
 			err = query.GetCoder().Decode(query.ResultType, ret, query.Receiver)
 			if err != nil && query.RespError != nil {
 				*query.RespError = errs.Newf(errs.ErrClientDecode,
-					"[request_id=%d] %v, result=[%s]", query.RequestID, err, types.InterfaceToString(result))
+					"[request_id=%d] %v, result=[%s]", query.RequestID, err, types.ToString(result))
 			}
 		}
 
