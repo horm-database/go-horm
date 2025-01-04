@@ -165,6 +165,7 @@ type FieldSpec struct {
   OnUpdateTime     bool    // 数据变更时修改为当前时间，具体格式根据 Type 决定，这里我推荐数据库自带的时间戳更新功能。
   TimeFmt          string  // 当字段底层类型为 time.Time 时，格式化时间，仅针对请求格式化，返回数据的解析在 codec 内。
   OnUniqueID       bool    // 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突
+  EsID             bool   // 是否 es 主键 _id
 }
 
 ```
@@ -1464,13 +1465,15 @@ GET /es_student/_search
 示例1：
 ```go
 func querySpecifiedColumn(ctx context.Context) {
-	var result = []map[string]interface{}{}
+	var results = []map[string]interface{}{}
 	isNil, err := horm.NewQuery("student").
-		Column("identify", "gender", "age", "name").FindAll().Exec(ctx, &result)
+		Column("id", "identify", "gender", "age", "name").
+		FindAll().Exec(ctx, &results)
 
 	...
 }
 ```
+SQL语句：
 ```sql
  SELECT `identify` , `gender` , `age` , `name`  FROM `student`
 ```
@@ -1497,19 +1500,20 @@ func querySpecifiedColumn(ctx context.Context) {
   }
 ]
 ```
-
 示例2：
 ```go
 func querySpecifiedColumn2(ctx context.Context) {
 	var result = map[string]interface{}{}
 	isNil, err := horm.NewQuery("student").
-		Column("count(1) as cnt", "avg(age) as age", "sum(score) as score").Find().Exec(ctx, &result)
+		Column("count(1) as cnt", "avg(age) as age", "sum(score) as score").
+		Find().Exec(ctx, &result)
 
 	...
 }
 ```
+SQL语句：
 ```sql
- SELECT  count(1) as cnt , avg(age) as age , sum(score) as score  FROM `student` LIMIT 1
+ SELECT count(1) as cnt , avg(age) as age , sum(score) as score  FROM `student` LIMIT 1
 ```
 返回结果：
 ```json
@@ -1523,61 +1527,172 @@ func querySpecifiedColumn2(ctx context.Context) {
 ## 主键搜索（elastic 则是 _id ）
 - 示例1 mysql 主键查询：
 ```go
-func Test(ctx context.Context) {
-	result := Student{}
+func queryFindBy(ctx context.Context) {
+	var result = Student{}
+	isNil, err := horm.NewQuery("student").FindBy("id", 1).Exec(ctx, &result)
 
-	err := horm.NewQuery("student").Eq("userid", 3099).FindOne().Exec(ctx, &result)
-	// SELECT * FROM `student` WHERE `userid` = 3099
 	...
 }
 ```
+SQL语句：
+```sql
+ SELECT * FROM `student` WHERE   `id` = 1  LIMIT 1
+```
+返回结果：
+```json
+{
+    "birthday": "1995-03-23T00:00:00+08:00",
+    "created_at": "2024-11-30T20:53:57+08:00",
+    "updated_at": "2024-12-12T19:30:37+08:00",
+    "age": 19,
+    "name": "caohao",
+    "gender": 1,
+    "score": 89.7,
+    "image": "SU1BR0UuUENH",
+    "article": "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+    "exam_time": "15:30:00",
+    "id": 1,
+    "identify": 2024061211
+}
+```
+
 - 示例2 mysql 主键查询：
 ```go
-func Test(ctx context.Context) {
-	result := []*Student{}
+func queryFindAllBy(ctx context.Context) {
+	var result = []*Student{}
+	isNil, err := horm.NewQuery("student").FindAllBy("id", []int{1, 2}).Exec(ctx, &result)
 
-	err := horm.NewQuery("student").Eq("userid", []int{3099, 6348, 9713}).FindAll().Exec(ctx, &result)
-	// SELECT * FROM `student` WHERE `userid` IN (3099, 6348, 9713) LIMIT 100
 	...
 }
 ```
+SQL语句：
+```sql
+SELECT * FROM `student` WHERE `id` IN (1, 2)  LIMIT 100
+```
 
-- 示例3 elastic 按照 _id 批量插入 ：
+- 示例3 elastic 按照 _id 批量插入有几种方式：
+
 ```go
-func Test(ctx context.Context) {
-	datas := []*Student{}
+// 可以在 id 字段的 orm 标签加上 es_id，那么会把 id 字段作为 es 主键。
+type Student struct {
+  Id        uint64     `orm:"id,uint64,onuniqueid,es_id" json:"id"`
+  Identify  int64      `orm:"identify,int64" json:"identify"`                      //学生编号
+  Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`           //1-male 2-female
+  Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                //年龄
+  Name      string     `orm:"name,string,omitupdateempty" json:"name"`             //名称
+  Score     float64    `orm:"score,double,omitempty" json:"score"`                 //分数
+  Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                  //image
+  Article   string     `orm:"article,string,omitempty" json:"article"`             //publish article
+  ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`         //考试时间
+  Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` //出生日期
+  CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`      //创建时间
+  UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //修改时间
+}
 
-	datas = append(datas, &Student{
-		Userid: 2338,
-		Sex:    "male",
-		Name:   "smallhowcao",
-	})
+```
 
-	datas = append(datas, &Student{
-		Userid: 1650,
-		Sex:    "male",
-		Name:   "smallhowcao",
-	})
+```go
+func queryInsertEsByID(ctx context.Context) {
+	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
 
-	ids := []interface{}{2338, 1650}
+	datas := []*Student{
+		{
+			Identify: 2024061211,
+			Gender:   1,
+			Age:      19,
+			Name:     "caohao",
+			Score:    89.7,
+			Image:    []byte("IMAGE.PCG"),
+			Article:  "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+			ExamTime: "15:30:00",
+			Birthday: types.Time(birthday),
+		},
+		{
+			Identify: 2024070733,
+			Gender:   1,
+			Age:      17,
+			Name:     "jerry",
+			Score:    92.3,
+			Image:    []byte("IMAGE.PCG"),
+			Article:  "Design and analysis of algorithms and data structures",
+			ExamTime: "15:30:00",
+			Birthday: types.Time(birthday),
+		},
+	}
 
-	result := make([]*horm.EsResult, 0)
-	err := horm.NewQuery("es_student").Eq("_id", ids).InsertStructs(datas).Exec(ctx, &result)
-	...
+	modRets := make([]*proto.ModRet, 0)
+	_, err := horm.NewQuery("es_student").Insert(&datas).Exec(ctx, &modRets)
+	if err != nil {
+		fmt.Printf("batch insert student error: %v", err)
+		return
+	}
+
+	if horm.IsAllSuccess(modRets) {
+		fmt.Printf("batch insert success")
+		return
+	}
 }
 ```
 
 返回结果：
+```json
+[
+    {
+        "id": "233602020806766593",
+        "rows_affected": 1,
+        "version": 1
+    },
+    {
+        "id": "233602020806766594",
+        "rows_affected": 1,
+        "version": 1
+    }
+]
+```
+
+也可以直接在 Student 结构体加个 `_id` 字段。作为主键，还可以如下在 `ID()` 里面加主键：
+```go
+func queryInsertEsByID2(ctx context.Context) {
+	...
+
+	datas := []*Student{
+		{
+			Id:       55,
+			...
+		},
+		{
+			Id:       66,
+			...
+		},
+	}
+
+	modRets := make([]*proto.ModRet, 0)
+	_, err := horm.NewQuery("es_student").ID([]int{55, 66}).Insert(&datas).Exec(ctx, &modRets)
+	...
+}
+```
+
 
 - 示例 4 elastic 按照 _id 查询
 ```go
-func Test(ctx context.Context) {
-	ids := []interface{}{2338, 1650}
+func queryByID(ctx context.Context) {
+	var result = Student{}
+	isNil, err := horm.NewQuery("es_student").ID("233602020806766593").Find().Exec(ctx, &result)
 
-	result := []*Student{}
-	err := horm.NewQuery("es_student").Eq("_id", ids).FindAll().Exec(ctx, &result)
 	...
 }
+```
+请求如下：
+```json
+[
+    {
+        "name": "es_student",
+        "op": "find",
+        "where": {
+            "_id": "233602020806766593"
+        }
+    }
+]
 ```
 
 ## where 查询条件
