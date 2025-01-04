@@ -1388,14 +1388,15 @@ type ModRet struct {
 
 上面语句在 es 插入了两条数据，如下，我们可以看到 updated_at 和 created_at 的时间格式，在未指定 time_fmt 的情况下，时间会被编码成 
 RFC3339 格式，如果希望修改格式，可以指定 time_fmt，但是struct的接收字段类型必须是 types.Time，否则在 Find 的时候，Receive 解析会异常。
-```json
+```eslint
 GET /es_student/_search
 {
   "query": {
     "match_all": {}
   }
 }
----------
+```
+```json
 {
   "took" : 2,
   "timed_out" : false,
