@@ -483,10 +483,10 @@ func queryDataType(ctx context.Context) {
 		Identify: 2024080313,
 		Gender:   2,
 		Age:      23,
-		Name:     "kitty",
+		Name:     "caohao",
 		Score:    91.5,
 		Image:    []byte("IMAGE.PCG"),
-		Article:  "Artificial Intelligence",
+		Article:  "groundbreaking work in cryptography and complexity theory",
 		ExamTime: "15:30:00",
 		Birthday: types.Time(birthday),
 	}
@@ -508,7 +508,7 @@ func queryDataType(ctx context.Context) {
     "data": {
       "created_at": "2024-12-28T19:47:05.056251+08:00",
       "updated_at": "2024-12-28T19:47:05.056229+08:00",
-      "name": "kitty",
+      "name": "caohao",
       "score": 91.5,
       "image": "SU1BR0UuUENH",
       "exam_time": "15:30:00",
@@ -517,7 +517,7 @@ func queryDataType(ctx context.Context) {
       "birthday": "1987-08-27",
       "identify": 2024080313,
       "age": 23,
-      "article": "Artificial Intelligence"
+      "article": "groundbreaking work in cryptography and complexity theory"
     },
     "data_type": {
       "identify": 10,
@@ -606,10 +606,10 @@ func queryAlias(ctx context.Context) {
 		Identify: 2024080313,
 		Gender:   2,
 		Age:      23,
-		Name:     "kitty",
+		Name:     "jerry",
 		Score:    91.5,
 		Image:    []byte("IMAGE.PCG"),
-		Article:  "Artificial Intelligence",
+		Article:  "contributions to deep learning in artificial intelligence",
 		ExamTime: "15:30:00",
 		Birthday: types.Time(birthday),
 	}
@@ -641,8 +641,8 @@ func queryAlias(ctx context.Context) {
   },
   "find": {
     "id": 227759629650636801,
-    "name": "kitty",
-    "article": "Artificial Intelligence",
+    "name": "jerry",
+    "article": "contributions to deep learning in artificial intelligence",
     "created_at": "2024-12-19T11:55:27+08:00",
     "birthday": "1987-08-27T00:00:00+09:00",
     "updated_at": "2024-12-19T11:55:27+08:00",
@@ -1320,10 +1320,10 @@ func isAllSuccess(ctx context.Context) {
 			Identify: 2024061211,
 			Gender:   1,
 			Age:      19,
-			Name:     "caohao",
+			Name:     "wigderson",
 			Score:    89.7,
 			Image:    []byte("IMAGE.PCG"),
-			Article:  "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+			Article:  "enhanced human understanding of the role of randomness and pseudo-randomness in computing.",
 			ExamTime: "15:30:00",
 			Birthday: types.Time(birthday),
 		},
@@ -1332,10 +1332,10 @@ func isAllSuccess(ctx context.Context) {
 			Identify: 2024070733,
 			Gender:   1,
 			Age:      17,
-			Name:     "jerry",
+			Name:     "liskov",
 			Score:    92.3,
 			Image:    []byte("IMAGE.PCG"),
-			Article:  "Design and analysis of algorithms and data structures",
+			Article:  "practice and theory of programming language and systems design",
 			ExamTime: "15:30:00",
 			Birthday: types.Time(birthday),
 		},
@@ -1421,7 +1421,7 @@ GET /es_student/_search
         "_score" : 1.0,
         "_source" : {
           "age" : 19,
-          "article" : "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+          "article" : "enhanced human understanding of the role of randomness and pseudo-randomness in computing.",
           "birthday" : "1987-08-27",
           "created_at" : "2024-12-26T19:38:59.750313+08:00",
           "exam_time" : "15:30:00",
@@ -1429,7 +1429,7 @@ GET /es_student/_search
           "id" : 1,
           "identify" : 2024061211,
           "image" : "SU1BR0UuUENH",
-          "name" : "caohao",
+          "name" : "wigderson",
           "score" : 89.7,
           "updated_at" : "2024-12-26T19:38:59.750316+08:00"
         }
@@ -1441,7 +1441,7 @@ GET /es_student/_search
         "_score" : 1.0,
         "_source" : {
           "age" : 17,
-          "article" : "Design and analysis of algorithms and data structures",
+          "article" : "practice and theory of programming language and systems design",
           "birthday" : "1987-08-27",
           "created_at" : "2024-12-26T19:38:59.750328+08:00",
           "exam_time" : "15:30:00",
@@ -1449,7 +1449,7 @@ GET /es_student/_search
           "id" : 2,
           "identify" : 2024070733,
           "image" : "SU1BR0UuUENH",
-          "name" : "jerry",
+          "name" : "liskov",
           "score" : 92.3,
           "updated_at" : "2024-12-26T19:38:59.750331+08:00"
         }
@@ -1536,7 +1536,7 @@ func queryFindBy(ctx context.Context) {
 ```
 SQL语句：
 ```sql
- SELECT * FROM `student` WHERE   `id` = 1  LIMIT 1
+ SELECT * FROM `student` WHERE  `id` = 1  LIMIT 1
 ```
 返回结果：
 ```json
@@ -1597,10 +1597,10 @@ func insertEsByID(ctx context.Context) {
 			Identify: 2024061211,
 			Gender:   1,
 			Age:      19,
-			Name:     "caohao",
+			Name:     "metcalfe",
 			Score:    89.7,
 			Image:    []byte("IMAGE.PCG"),
-			Article:  "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+			Article:  "contribution to leading the public into the era of hyper-connectivity",
 			ExamTime: "15:30:00",
 			Birthday: types.Time(birthday),
 		},
@@ -1608,10 +1608,10 @@ func insertEsByID(ctx context.Context) {
 			Identify: 2024070733,
 			Gender:   1,
 			Age:      17,
-			Name:     "jerry",
+			Name:     "emerson",
 			Score:    92.3,
 			Image:    []byte("IMAGE.PCG"),
-			Article:  "Design and analysis of algorithms and data structures",
+			Article:  "develop automated methods to detect design errors in computer hardware and software",
 			ExamTime: "15:30:00",
 			Birthday: types.Time(birthday),
 		},
@@ -2011,7 +2011,7 @@ func queryWildcard(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["name ~(wildcard)"] = "j*r?y" // jerry, jrby, jeerby...
+	where["name ~(wildcard)"] = "j*r?y" // jerry, jriy, jasteriy...
 
 	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
 	
@@ -2046,7 +2046,7 @@ func queryRegexp(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["article ~(regexp)"] = "W[0-9].+"
+	where["name ~(regexp)"] = "W[0-9].+"
 
 	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
 	
@@ -2061,7 +2061,7 @@ func queryRegexp(ctx context.Context) {
     "bool": {
       "must": {
         "regexp": {
-          "article": {
+          "name": {
             "value": "W[0-9].+"
           }
         }
@@ -2075,13 +2075,14 @@ func queryRegexp(ctx context.Context) {
 
 - NOT 部分匹配排除
 ```go
-func Test(ctx context.Context) {
+func queryNotPrefix(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title !~"] = "smallhow" // 不以smallhow开头
+	where["name !~"] = "cao" // 不以 cao 开头
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
@@ -2089,13 +2090,17 @@ func Test(ctx context.Context) {
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must_not":{
-            "prefix":{
-                "title":"smallhow"
-            }
+  "query": {
+    "bool": {
+      "must_not": {
+        "prefix": {
+          "name": "cao"
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 
