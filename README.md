@@ -2011,7 +2011,7 @@ func queryWildcard(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["name ~(type=wildcard)"] = "j*r?y" // jerry, jrby, jeerby...
+	where["name ~(wildcard)"] = "j*r?y" // jerry, jrby, jeerby...
 
 	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
 	
@@ -2046,7 +2046,7 @@ func queryRegexp(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["article ~(type=regexp)"] = "W[0-9].+"
+	where["article ~(regexp)"] = "W[0-9].+"
 
 	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
 	
