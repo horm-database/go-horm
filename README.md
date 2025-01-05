@@ -2104,178 +2104,200 @@ func queryNotPrefix(ctx context.Context) {
 ```
 
 ### 短语匹配 match_phrase
-在 elastic search 中， `match_phrase` 查询首先将查询字符串解析成一个`词项列表`，然后对这些词项进行搜索，但只保留那些包含`全部 搜索词项`，且`位置`与搜索词项相同的文档。在 horm ，我们用 `?` 操作符表示短语匹配。 `!?` 表示短语匹配排除。
+在 Elastic Search 中， `match_phrase` 查询首先将查询字符串解析成一个`词项列表`，然后对这些词项进行搜索，但只保留那些包含`全部 搜索词项`，且`位置`与搜索词项相同的文档。在 horm ，我们用 `?` 操作符表示短语匹配。 `!?` 表示短语匹配排除。
 
 ```go
-func Test(ctx context.Context) {
+func queryMatchPhrase(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title ?"] = "smallhow"
+	where["article ?"] = "programming"
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must":{
-            "match_phrase":{
-                "title":{
-                    "query":"smallhow"
-                }
-            }
+  "query": {
+    "bool": {
+      "must": {
+        "match_phrase": {
+          "article": {
+            "query": "programming"
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 
 #### 灵活度 slop
-精确短语匹配 或许是过于严格了。也许我们想要包含 “quick brown fox” 的文档也能够匹配 “quick fox” ，如下：
+精确短语匹配 或许是过于严格了。也许我们想要包含 “develop automated methods” 的文档也能够匹配 “develop methods” ，如下：
 ```go
-func Test(ctx context.Context) {
+func queryMatchPhraseSlop(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title ?(slop=1)"] = "quick fox"
+	where["article ?(slop=1)"] = "develop methods"
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must":{
-            "match_phrase":{
-                "title":{
-                    "query":"quick fox",
-                    "slop":1
-                }
-            }
+  "query": {
+    "bool": {
+      "must": {
+        "match_phrase": {
+          "article": {
+            "query": "develop methods",
+            "slop": 1
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 
 #### 提升权重
-我们可以通过指定  `boost`  来控制任何查询语句的相对的权重，  `boost`  的默认值为  `1`  ，大于  `1`  会提升一个语句的相对权重。如下，title 中包含"smallhow"的话，权重更高。那么他可能会拥有更高的 `_score`评分。
+我们可以通过指定 `boost` 来控制任何查询语句的相对的权重，`boost` 的默认值为 `1` ，大于 `1` 会提升一个语句的相对权重。如下，name 中包含"caohao"的话，权重更高。那么他可能会拥有更高的 `_score`评分。
 ```go
-func Test(ctx context.Context) {
+func queryMatchPhraseBoost(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title ?(boost=3)"] = "smallhow"
-	where["abstract ?(boost=2)"] = "smallhow"
-	where["content ?(boost=1)"] = "smallhow"
+	where["name ?(boost=3)"] = "caohao"
+	where["article ?(boost=2)"] = "complexity"
+	where["exam_time ?(boost=1)"] = "15"
 
-	err := horm.NewQuery("es_student").FindAll(where).Order("_score", true).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Order("_score desc").Exec(ctx, &result)
+
 	...
 }
+
 ```
 生成的 es 查询语句：
 ```json
 {
-    "query":{
-        "bool":{
-            "must":[
-                {
-                    "match_phrase":{
-                        "abstract":{
-                            "boost":2,
-                            "query":"smallhow"
-                        }
-                    }
-                },
-                {
-                    "match_phrase":{
-                        "content":{
-                            "boost":1,
-                            "query":"smallhow"
-                        }
-                    }
-                },
-                {
-                    "match_phrase":{
-                        "title":{
-                            "boost":3,
-                            "query":"smallhow"
-                        }
-                    }
-                }
-            ]
-        }
-    },
-    "from":0,
-    "size":100,
-    "sort":[
+  "from": 0,
+  "query": {
+    "bool": {
+      "must": [
         {
-            "_score":{
-                "order":"desc"
+          "match_phrase": {
+            "exam_time": {
+              "boost": 1,
+              "query": "15"
             }
+          }
+        },
+        {
+          "match_phrase": {
+            "name": {
+              "boost": 3,
+              "query": "caohao"
+            }
+          }
+        },
+        {
+          "match_phrase": {
+            "article": {
+              "boost": 2,
+              "query": "complexity"
+            }
+          }
         }
-    ]
+      ]
+    }
+  },
+  "size": 100,
+  "sort": [
+    {
+      "_score": {
+        "order": "desc"
+      }
+    }
+  ]
 }
 ```
 
-#### 多个属性
-一个where 条件可以同时拥有多个数据，通过 `&` 来分隔，如下 title 有 slop 和 boost 两个条件属性。
+#### 多操作属性
+一个 where 条件可以拥有多个操作属性，通过逗号 `','` 来分隔，如下 article 有 slop 和 boost 两个条件属性。
 ```go
-func Test(ctx context.Context) {
+func queryMatchPhraseSlopBoost(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title ?(slop=2,boost=1)"] = "quick fox"
+	where["article ?(slop=2,boost=1)"] = "develop methods"
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must":{
-            "match_phrase":{
-                "title":{
-                    "query":"quick fox",
-                    "slop":2,
-                    "boost":1
-                }
-            }
+  "query": {
+    "bool": {
+      "must": {
+        "match_phrase": {
+          "article": {
+            "boost": 1,
+            "query": "develop methods",
+            "slop": 2
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 
 #### NOT 短语匹配排除
 操作符 `!?` 表示短语匹配排除
 ```go
-func Test(ctx context.Context) {
+func queryNotMatchPhrase(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title !?"] = "smallhow" //标题中不包含smallhow的记录
+	where["article !?"] = "develop" //文章不包含 develop 的记录
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must_not":{
-            "match_phrase":{
-                "title":{
-                    "query":"smallhow"
-                }
-            }
+  "query": {
+    "bool": {
+      "must_not": {
+        "match_phrase": {
+          "article": {
+            "query": "develop"
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 ### 全文搜索 match（elastic 特有）
