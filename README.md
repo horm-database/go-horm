@@ -1934,7 +1934,7 @@ func queryCompWhere4(ctx context.Context) {
 }
 ```
 ### 模糊匹配
-#### LIKE 
+#### SQL LIKE 
 在数据库引擎为 sql 相关系统时，`~` 操作符表示 LIKE。
 - 示例1：
 ```go
@@ -1968,10 +1968,12 @@ func queryLike2(ctx context.Context) {
 }
 ```
 
-#### 部分匹配（prefix、wildcard、regexp）
+#### elastic 部分匹配
 不同于 sql 相关数据库，在 elastic 中，`~` 操作符表示部分匹配。部分匹配分3种类型，prefix（默认）、wildcard、regexp
 
 - prefix 前缀查询（默认）
+<br><br>
+
 类似 mysql 的 like 'jerry%'，以 jerry 开头的所有内容。
 ```go
 func queryPrefix(ctx context.Context) {
@@ -2000,7 +2002,9 @@ func queryPrefix(ctx context.Context) {
 }
 ```
 
-##### wildcard 通配符查询
+- wildcard 通配符查询
+<br><br>
+
 它使用标准的 shell 通配符查询： `?` 匹配任意字符， `*` 匹配 0 或多个字符。
 ```go
 func queryWildcard(ctx context.Context) {
@@ -2033,7 +2037,9 @@ func queryWildcard(ctx context.Context) {
 }
 ```
 
-##### regexp 正则表达式查询
+- regexp 正则表达式查询
+<br><br>
+
 这个是正则查询，如下示例的正则表达式要求词必须以 W 开头，紧跟 0 至 9 之间的任何一个数字，然后接一或多个其他字符。
 ```go
 func queryRegexp(ctx context.Context) {
@@ -2067,7 +2073,7 @@ func queryRegexp(ctx context.Context) {
 }
 ```
 
-##### NOT 部分匹配排除
+- NOT 部分匹配排除
 ```go
 func Test(ctx context.Context) {
 	result := make([]*Student, 0)
