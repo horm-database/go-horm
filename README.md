@@ -45,8 +45,9 @@ CREATE TABLE `student` (
     `birthday` date DEFAULT NULL COMMENT '出生日期',
     `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
-    PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生表';
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `identity` (`identify`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生表'
 
 CREATE TABLE `student_course` (
     `id` int NOT NULL AUTO_INCREMENT,
@@ -481,7 +482,7 @@ func queryDataType(ctx context.Context) {
 
 	data := Student{
 		Identify: 2024080313,
-		Gender:   2,
+		Gender:   1,
 		Age:      23,
 		Name:     "caohao",
 		Score:    91.5,
@@ -495,41 +496,40 @@ func queryDataType(ctx context.Context) {
 	var addRet = proto.ModRet{}
 
 	//下面操作有加别名
-	isNil, err := horm.NewQuery("student").Insert(&data).Exec(ctx, &addRet)
-    ...
+	isNil, err := horm.NewQuery("student(add)").Insert(&data).Exec(ctx, &addRet)
+
+	...
 }
 ```
 上面代码生成的 json 请求为：
 ```json
-[
-  {
-    "name": "student(add)",
-    "op": "insert",
-    "data": {
-      "created_at": "2024-12-28T19:47:05.056251+08:00",
-      "updated_at": "2024-12-28T19:47:05.056229+08:00",
-      "name": "caohao",
-      "score": 91.5,
-      "image": "SU1BR0UuUENH",
-      "exam_time": "15:30:00",
-      "gender": 2,
-      "id": 231139809924493313,
-      "birthday": "1987-08-27",
-      "identify": 2024080313,
-      "age": 23,
-      "article": "groundbreaking work in cryptography and complexity theory"
-    },
-    "data_type": {
-      "identify": 10,
-      "age": 6,
-      "id": 14,
-      "image": 2,
-      "gender": 7,
-      "created_at": 1,
-      "updated_at": 1
-    }
+{
+  "name": "student(add)",
+  "op": "insert",
+  "data": {
+    "identify": 2024080313,
+    "name": "caohao",
+    "score": 91.5,
+    "created_at": "2025-01-05T20:14:50.702248+08:00",
+    "exam_time": "15:30:00",
+    "birthday": "1987-08-27",
+    "updated_at": "2025-01-05T20:14:50.702249+08:00",
+    "article": "groundbreaking work in cryptography and complexity theory",
+    "id": 234047220842770433,
+    "image": "SU1BR0UuUENH",
+    "gender": 1,
+    "age": 23
+  },
+  "data_type": {
+    "id": 14,
+    "image": 2,
+    "created_at": 1,
+    "identify": 10,
+    "gender": 7,
+    "age": 6,
+    "updated_at": 1
   }
-]
+}
 ```
 
 horm 基础类型，会在数据统一接入服务根据指定的数据源引擎映射、解析成对应的类型，例如在 mysql 和 clickhouse 类型映射为：
@@ -600,14 +600,14 @@ import (
 )
 
 func queryAlias(ctx context.Context) {
-	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+	birthday, _ := time.Parse("2006-01-02", "1995-03-24")
 
 	data := Student{
-		Identify: 2024080313,
-		Gender:   2,
-		Age:      23,
+		Identify: 2024092316,
+		Gender:   1,
+		Age:      17,
 		Name:     "jerry",
-		Score:    91.5,
+		Score:    82.5,
 		Image:    []byte("IMAGE.PCG"),
 		Article:  "contributions to deep learning in artificial intelligence",
 		ExamTime: "15:30:00",
@@ -636,21 +636,21 @@ func queryAlias(ctx context.Context) {
 ```json
 {
   "add": {
-    "id": "227759629650636801",
+    "id": "234049805125431297",
     "rows_affected": 1
   },
   "find": {
-    "id": 227759629650636801,
     "name": "jerry",
-    "article": "contributions to deep learning in artificial intelligence",
-    "created_at": "2024-12-19T11:55:27+08:00",
-    "birthday": "1987-08-27T00:00:00+09:00",
-    "updated_at": "2024-12-19T11:55:27+08:00",
-    "identify": 2024080313,
-    "gender": 2,
-    "age": 23,
-    "score": 91.5,
     "image": "SU1BR0UuUENH",
+    "article": "contributions to deep learning in artificial intelligence",
+    "updated_at": "2025-01-05T20:30:22+08:00",
+    "birthday": "1995-03-24T00:00:00+08:00",
+    "created_at": "2025-01-05T20:30:22+08:00",
+    "id": 234049805125431297,
+    "identify": 2024092316,
+    "gender": 1,
+    "age": 17,
+    "score": 82.5,
     "exam_time": "15:30:00"
   }
 }
@@ -723,13 +723,13 @@ import (
 func queryMultiReturn(ctx context.Context) {
 	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
 	data := Student{
-		Identify: 2024080313,
-		Gender:   2,
-		Age:      23,
-		Name:     "kitty",
-		Score:    91.5,
+		Identify: 2024092316,
+		Gender:   1,
+		Age:      17,
+		Name:     "jerry",
+		Score:    82.5,
 		Image:    []byte("IMAGE.PCG"),
-		Article:  "Artificial Intelligence",
+		Article:  "contributions to deep learning in artificial intelligence",
 		ExamTime: "15:30:00",
 		Birthday: types.Time(birthday),
 	}
@@ -814,32 +814,32 @@ func queryPageReturn2(ctx context.Context) {
 
 ```go
 func queryModeParallel(ctx context.Context) {
-  birthday, _ := time.Parse("2006-01-02", "1987-08-27")
-  data := Student{
-    Identify: 2024080313,
-    Gender:   2,
-    Age:      23,
-    Name:     "kitty",
-    Score:    91.5,
-    Image:    []byte("IMAGE.PCG"),
-    Article:  "Artificial Intelligence",
-    ExamTime: "15:30:00",
-    Birthday: types.Time(birthday),
-  }
-  
-  var isNil bool
-  var zaddErr, rangeErr error
-  results := make([]*Student, 0)
-  ages := make([]float64, 0)
-  
-  //下面操作有加别名
-  err := horm.NewQuery("redis_student(zadd)").
-	  ZAdd("student_age_rank", &data, float64(data.Age)).WithReceiver(nil, &zaddErr).
-	  Next("redis_student(range)").
-	  ZRangeByScore("student_age_rank", 10, 50, true).WithReceiver(&isNil, &rangeErr, &results, &ages).
-	  PExec(ctx)
-  
-  ...
+	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+	data := Student{
+		Identify: 2024092316,
+		Gender:   1,
+		Age:      17,
+		Name:     "jerry",
+		Score:    82.5,
+		Image:    []byte("IMAGE.PCG"),
+		Article:  "contributions to deep learning in artificial intelligence",
+		ExamTime: "15:30:00",
+		Birthday: types.Time(birthday),
+	}
+
+	var isNil bool
+	var zaddErr, rangeErr error
+	students := make([]*Student, 0)
+	ages := make([]float64, 0)
+
+	//下面操作有加别名
+	err := horm.NewQuery("redis_student(zadd)").
+		ZAdd("student_age_rank", &data, float64(data.Age)).WithReceiver(nil, &zaddErr).
+		Next("redis_student(range)").
+		ZRangeByScore("student_age_rank", 10, 50, true).WithReceiver(&isNil, &rangeErr, &students, &ages).
+		PExec(ctx)
+
+	...
 }
 ```
 
@@ -906,7 +906,7 @@ func queryReference3(ctx context.Context) {
 	var rank int
 	var rankReward = ScoreRankReward{}
 
-	err := horm.NewQuery("redis_student(score_rank)").ZRank("student_score_rank", 2024061211).
+	err := horm.NewQuery("redis_student(score_rank)").ZRank("student_score_rank", 2024092316).
 		WithReceiver(nil, &rankErr, &rank).
 		Next("score_rank_reward").Find(horm.Where{"@rank": "score_rank"}).
 		WithReceiver(&isNil, &rankRewardErr, &rankReward).
@@ -1056,127 +1056,127 @@ func queryModeCompound(ctx context.Context) {
 
 ```json
 {
-    "student": {
-        "detail": {
-            "total": 2,
-            "total_page": 1,
-            "page": 1,
-            "size": 10
-        },
-        "data": [
+  "student": {
+    "detail": {
+      "total": 2,
+      "total_page": 1,
+      "page": 1,
+      "size": 10
+    },
+    "data": [
+      {
+        "id": 234047220842770433,
+        "identify": 2024080313,
+        "gender": 1,
+        "age": 23,
+        "name": "caohao",
+        "score": 91.5,
+        "image": "SU1BR0UuUENH",
+        "article": "groundbreaking work in cryptography and complexity theory",
+        "exam_time": "15:30:00",
+        "birthday": "1987-08-27T00:00:00+09:00",
+        "created_at": "2025-01-05T20:20:06+08:00",
+        "updated_at": "2025-01-05T20:20:06+08:00",
+        "student_course": {
+          "data": [
             {
-                "id": 1,
-                "identify": 2024061211,
-                "gender": 1,
-                "age": 19,
-                "name": "caohao",
-                "score": 89.7,
-                "image": "SU1BR0UuUENH",
-                "article": "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
-                "exam_time": "15:30:00",
-                "birthday": "1995-03-23T00:00:00+08:00",
-                "created_at": "2024-11-30T20:53:57+08:00",
-                "updated_at": "2024-12-12T19:30:37+08:00",
-                "student_course": {
-                    "data": [
-                        {
-                            "id": 1,
-                            "identify": 2024061211,
-                            "course": "Math",
-                            "hours": 54,
-                            "course_info": {
-                                "data": {
-                                    "course": "Math",
-                                    "teacher": "Simon",
-                                    "time": "11:00:00"
-                                }
-                            }
-                        },
-                        {
-                            "id": 2,
-                            "identify": 2024061211,
-                            "course": "Physics",
-                            "hours": 32,
-                            "course_info": {
-                                "data": {
-                                    "course": "Physics",
-                                    "teacher": "Richard",
-                                    "time": "14:00:00"
-                                }
-                            }
-                        }
-                    ]
-                },
-                "teacher_info": {
-                    "data": [
-                        {
-                            "teacher": "Richard",
-                            "age": 57,
-                            "test_nil": {
-                                "is_nil": true
-                            }
-                        },
-                        {
-                            "teacher": "Simon",
-                            "age": 61,
-                            "test_nil": {
-                                "is_nil": true
-                            }
-                        }
-                    ]
+              "id": 1,
+              "identify": 2024080313,
+              "course": "Math",
+              "hours": 54,
+              "course_info": {
+                "data": {
+                  "course": "Math",
+                  "teacher": "Simon",
+                  "time": "11:00:00"
                 }
+              }
             },
             {
-                "id": 2,
-                "identify": 2024070733,
-                "gender": 1,
-                "age": 17,
-                "name": "jerry",
-                "score": 92.3,
-                "image": "SU1BR0UuUENH",
-                "article": "Design and analysis of algorithms and data structures",
-                "exam_time": "14:30:00",
-                "birthday": "1993-02-22T00:00:00+08:00",
-                "created_at": "2024-11-30T20:57:03+08:00",
-                "updated_at": "2024-12-12T20:41:00+08:00",
-                "student_course": {
-                    "data": [
-                        {
-                            "id": 3,
-                            "identify": 2024070733,
-                            "course": "English",
-                            "hours": 68,
-                            "course_info": {
-                                "data": {
-                                    "course": "English",
-                                    "teacher": "Dennis",
-                                    "time": "15:30:00"
-                                }
-                            }
-                        }
-                    ]
-                },
-                "teacher_info": {
-                    "data": [
-                        {
-                            "teacher": "Dennis",
-                            "age": 39,
-                            "test_nil": {
-                                "is_nil": true
-                            }
-                        }
-                    ]
+              "id": 2,
+              "identify": 2024080313,
+              "course": "Physics",
+              "hours": 32,
+              "course_info": {
+                "data": {
+                  "course": "Physics",
+                  "teacher": "Richard",
+                  "time": "14:00:00"
                 }
+              }
             }
-        ]
-    },
-    "test_error": {
-        "error": {
-            "type": 2,
-            "code": 1054,
-            "msg": "mysql query error: [Unknown column 'not_exist_field' in 'where clause']"
+          ]
+        },
+        "teacher_info": {
+          "data": [
+            {
+              "teacher": "Richard",
+              "age": 57,
+              "test_nil": {
+                "is_nil": true
+              }
+            },
+            {
+              "teacher": "Simon",
+              "age": 61,
+              "test_nil": {
+                "is_nil": true
+              }
+            }
+          ]
         }
+      },
+      {
+        "id": 234049805125431297,
+        "identify": 2024092316,
+        "gender": 1,
+        "age": 17,
+        "name": "jerry",
+        "score": 82.5,
+        "image": "SU1BR0UuUENH",
+        "article": "contributions to deep learning in artificial intelligence",
+        "exam_time": "15:30:00",
+        "birthday": "1995-03-24T00:00:00+08:00",
+        "created_at": "2025-01-05T20:30:22+08:00",
+        "updated_at": "2025-01-05T20:30:22+08:00",
+        "student_course": {
+          "data": [
+            {
+              "id": 3,
+              "identify": 2024092316,
+              "course": "English",
+              "hours": 68,
+              "course_info": {
+                "data": {
+                  "course": "English",
+                  "teacher": "Dennis",
+                  "time": "15:30:00"
+                }
+              }
+            }
+          ]
+        },
+        "teacher_info": {
+          "data": [
+            {
+              "teacher": "Dennis",
+              "age": 39,
+              "test_nil": {
+                "is_nil": true
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "test_error": {
+    "error": {
+      "type": 2,
+      "code": 1054,
+      "msg": "mysql query error: [Unknown column 'not_exist_field' in 'where clause']"
     }
+  }
 }
 ```
 
@@ -1312,31 +1312,31 @@ import (
 )
 
 func isAllSuccess(ctx context.Context) {
-	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+	birthday, _ := time.Parse("2006-01-02", "1967-08-27")
 
 	datas := []*Student{
 		{
 			Id:       1,
 			Identify: 2024061211,
 			Gender:   1,
-			Age:      19,
+			Age:      67,
 			Name:     "wigderson",
-			Score:    89.7,
+			Score:    98.3,
 			Image:    []byte("IMAGE.PCG"),
 			Article:  "enhanced human understanding of the role of randomness and pseudo-randomness in computing.",
-			ExamTime: "15:30:00",
+			ExamTime: "14:30:00",
 			Birthday: types.Time(birthday),
 		},
 		{
 			Id:       2,
 			Identify: 2024070733,
-			Gender:   1,
-			Age:      17,
+			Gender:   2,
+			Age:      59,
 			Name:     "liskov",
-			Score:    92.3,
+			Score:    99.1,
 			Image:    []byte("IMAGE.PCG"),
 			Article:  "practice and theory of programming language and systems design",
-			ExamTime: "15:30:00",
+			ExamTime: "11:30:00",
 			Birthday: types.Time(birthday),
 		},
 	}
@@ -1353,7 +1353,6 @@ func isAllSuccess(ctx context.Context) {
 		return
 	}
 }
-
 ```
 
 返回结果：
@@ -1399,59 +1398,59 @@ GET /es_student/_search
 ```
 ```json
 {
-  "took" : 2,
-  "timed_out" : false,
-  "_shards" : {
-    "total" : 1,
-    "successful" : 1,
-    "skipped" : 0,
-    "failed" : 0
+  "took": 0,
+  "timed_out": false,
+  "_shards": {
+    "total": 1,
+    "successful": 1,
+    "skipped": 0,
+    "failed": 0
   },
-  "hits" : {
-    "total" : {
-      "value" : 2,
-      "relation" : "eq"
+  "hits": {
+    "total": {
+      "value": 2,
+      "relation": "eq"
     },
-    "max_score" : 1.0,
-    "hits" : [
+    "max_score": 1,
+    "hits": [
       {
-        "_index" : "es_student",
-        "_type" : "_doc",
-        "_id" : "Ay7DApQBdHFFOkFBRxKQ",
-        "_score" : 1.0,
-        "_source" : {
-          "age" : 19,
-          "article" : "enhanced human understanding of the role of randomness and pseudo-randomness in computing.",
-          "birthday" : "1987-08-27",
-          "created_at" : "2024-12-26T19:38:59.750313+08:00",
-          "exam_time" : "15:30:00",
-          "gender" : 1,
-          "id" : 1,
-          "identify" : 2024061211,
-          "image" : "SU1BR0UuUENH",
-          "name" : "wigderson",
-          "score" : 89.7,
-          "updated_at" : "2024-12-26T19:38:59.750316+08:00"
+        "_index": "es_student",
+        "_type": "_doc",
+        "_id": "z6SONpQBT1ym-Bx5C67P",
+        "_score": 1,
+        "_source": {
+          "age": 67,
+          "article": "enhanced human understanding of the role of randomness and pseudo-randomness in computing.",
+          "birthday": "1967-08-27",
+          "created_at": "2025-01-05T20:58:37.585539+08:00",
+          "exam_time": "14:30:00",
+          "gender": 1,
+          "id": 1,
+          "identify": 2024061211,
+          "image": "SU1BR0UuUENH",
+          "name": "wigderson",
+          "score": 98.3,
+          "updated_at": "2025-01-05T20:58:37.585526+08:00"
         }
       },
       {
-        "_index" : "es_student",
-        "_type" : "_doc",
-        "_id" : "BC7DApQBdHFFOkFBRxKQ",
-        "_score" : 1.0,
-        "_source" : {
-          "age" : 17,
-          "article" : "practice and theory of programming language and systems design",
-          "birthday" : "1987-08-27",
-          "created_at" : "2024-12-26T19:38:59.750328+08:00",
-          "exam_time" : "15:30:00",
-          "gender" : 1,
-          "id" : 2,
-          "identify" : 2024070733,
-          "image" : "SU1BR0UuUENH",
-          "name" : "liskov",
-          "score" : 92.3,
-          "updated_at" : "2024-12-26T19:38:59.750331+08:00"
+        "_index": "es_student",
+        "_type": "_doc",
+        "_id": "0KSONpQBT1ym-Bx5C67P",
+        "_score": 1,
+        "_source": {
+          "age": 59,
+          "article": "practice and theory of programming language and systems design",
+          "birthday": "1967-08-27",
+          "created_at": "2025-01-05T20:58:37.585541+08:00",
+          "exam_time": "11:30:00",
+          "gender": 2,
+          "id": 2,
+          "identify": 2024070733,
+          "image": "SU1BR0UuUENH",
+          "name": "liskov",
+          "score": 99.1,
+          "updated_at": "2025-01-05T20:58:37.585543+08:00"
         }
       }
     ]
@@ -1481,10 +1480,10 @@ SQL语句：
 ```json
 [
   {
-    "identify": 2024061211,
+    "identify": 2024080313,
     "name": "caohao",
     "gender": 1,
-    "age": 19
+    "age": 23
   },
   {
     "identify": 2024070733,
@@ -1494,7 +1493,7 @@ SQL语句：
   },
   {
     "identify": 2024080313,
-    "name": "kitty",
+    "name": "wigderson",
     "gender": 2,
     "age": 23
   }
@@ -1524,19 +1523,19 @@ SQL语句：
 }
 ```
 
-## 主键查询（elastic 则是 _id ）
+## 主键查询（Elastic 的主键为 _id ）
 - 示例1 mysql 主键查询：
 ```go
 func queryFindBy(ctx context.Context) {
 	var result = Student{}
-	isNil, err := horm.NewQuery("student").FindBy("id", 1).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("student").FindBy("identify", 2024080313).Exec(ctx, &result)
 
 	...
 }
 ```
 SQL语句：
 ```sql
- SELECT * FROM `student` WHERE  `id` = 1  LIMIT 1
+ SELECT * FROM `student` WHERE  `identify` = 2024080313  LIMIT 1
 ```
 返回结果：
 ```json
@@ -1544,15 +1543,15 @@ SQL语句：
     "birthday": "1995-03-23T00:00:00+08:00",
     "created_at": "2024-11-30T20:53:57+08:00",
     "updated_at": "2024-12-12T19:30:37+08:00",
-    "age": 19,
+    "age": 23,
     "name": "caohao",
     "gender": 1,
-    "score": 89.7,
+    "score": 91.5,
     "image": "SU1BR0UuUENH",
-    "article": "Compilation theory, architecture of large systems, and development of Reduced Instruction Set (RISC) computers",
+    "article": "groundbreaking work in cryptography and complexity theory",
     "exam_time": "15:30:00",
-    "id": 1,
-    "identify": 2024061211
+    "id": 234047220842770433,
+    "identify": 2024080313
 }
 ```
 
@@ -1560,14 +1559,15 @@ SQL语句：
 ```go
 func queryFindAllBy(ctx context.Context) {
 	var result = []*Student{}
-	isNil, err := horm.NewQuery("student").FindAllBy("id", []int{1, 2}).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("student").
+		FindAllBy("identify", []int{2024080313, 2024092316}).Exec(ctx, &result)
 
 	...
 }
 ```
 SQL语句：
 ```sql
-SELECT * FROM `student` WHERE `id` IN (1, 2)  LIMIT 100
+SELECT * FROM `student` WHERE `identify` IN (2024080313, 2024092316)  LIMIT 100
 ```
 
 - 示例3 elastic 按照 _id 批量插入有几种方式：
@@ -1590,15 +1590,15 @@ type Student struct {
 }
 
 func insertEsByID(ctx context.Context) {
-	birthday, _ := time.Parse("2006-01-02", "1987-08-27")
+	birthday, _ := time.Parse("2006-01-02", "1976-08-27")
 
 	datas := []*Student{
 		{
 			Identify: 2024061211,
-			Gender:   1,
-			Age:      19,
+			Gender:   2,
+			Age:      39,
 			Name:     "metcalfe",
-			Score:    89.7,
+			Score:    93.8,
 			Image:    []byte("IMAGE.PCG"),
 			Article:  "contribution to leading the public into the era of hyper-connectivity",
 			ExamTime: "15:30:00",
@@ -1606,10 +1606,10 @@ func insertEsByID(ctx context.Context) {
 		},
 		{
 			Identify: 2024070733,
-			Gender:   1,
-			Age:      17,
+			Gender:   2,
+			Age:      36,
 			Name:     "emerson",
-			Score:    92.3,
+			Score:    79.9,
 			Image:    []byte("IMAGE.PCG"),
 			Article:  "develop automated methods to detect design errors in computer hardware and software",
 			ExamTime: "15:30:00",
@@ -1630,20 +1630,19 @@ func insertEsByID(ctx context.Context) {
 	}
 }
 ```
-
 返回结果：
 ```json
 [
-    {
-        "id": "233602020806766593",
-        "rows_affected": 1,
-        "version": 1
-    },
-    {
-        "id": "233602020806766594",
-        "rows_affected": 1,
-        "version": 1
-    }
+  {
+    "id": "234062949419855873",
+    "rows_affected": 1,
+    "version": 1
+  },
+  {
+    "id": "234062949419855874",
+    "rows_affected": 1,
+    "version": 1
+  }
 ]
 ```
 
@@ -1674,7 +1673,7 @@ func insertEsByID2(ctx context.Context) {
 ```go
 func queryByID(ctx context.Context) {
 	var result = Student{}
-	isNil, err := horm.NewQuery("es_student").ID("233602020806766593").Find().Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").ID("234062949419855873").Find().Exec(ctx, &result)
 
 	...
 }
@@ -1686,7 +1685,7 @@ func queryByID(ctx context.Context) {
         "name": "es_student",
         "op": "find",
         "where": {
-            "_id": "233602020806766593"
+            "_id": "234062949419855873"
         }
     }
 ]
@@ -1742,7 +1741,7 @@ Find 查询单条记录：
 ```go
 func queryFind(ctx context.Context) {
 	var result = Student{}
-	where := horm.Where{"identify": 2024061211}
+	where := horm.Where{"identify": 2024080313}
 	isNil, err := horm.NewQuery("student").Find(where).Exec(ctx, &result)
 
 	...
@@ -1968,7 +1967,7 @@ func queryLike2(ctx context.Context) {
 }
 ```
 
-#### elastic 部分匹配
+#### Elastic 部分匹配
 不同于 sql 相关数据库，在 elastic 中，`~` 操作符表示部分匹配。部分匹配分3种类型，prefix（默认）、wildcard、regexp
 
 - prefix 前缀查询（默认）
@@ -2104,8 +2103,8 @@ func queryNotPrefix(ctx context.Context) {
 }
 ```
 
-### 短语匹配 match_phrase（elastic 特有）
-`match_phrase`  查询首先将查询字符串解析成一个`词项列表`，然后对这些词项进行搜索，但只保留那些包含`全部 搜索词项`，且`位置`与搜索词项相同的文档。在 horm ，我们用 `?` 操作符表示短语匹配。 `!?` 表示短语匹配排除。
+### 短语匹配 match_phrase
+在 elastic search 中， `match_phrase` 查询首先将查询字符串解析成一个`词项列表`，然后对这些词项进行搜索，但只保留那些包含`全部 搜索词项`，且`位置`与搜索词项相同的文档。在 horm ，我们用 `?` 操作符表示短语匹配。 `!?` 表示短语匹配排除。
 
 ```go
 func Test(ctx context.Context) {
