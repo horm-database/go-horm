@@ -1830,7 +1830,7 @@ func queryCompWhere(ctx context.Context) {
   "size": 100
 }
 ```
-- 示例2（注释）：
+- 示例2，用注释来区分相同 key：
 ```go
 func queryCompWhere2(ctx context.Context) {
 	result := make([]*Student, 0)
@@ -1904,8 +1904,38 @@ func queryCompWhere3(ctx context.Context) {
 	...
 }
 ```
+- 示例 4， OR 下边的 map 数组，map里面各元素默认为 AND：
+```go
+func queryCompWhere4(ctx context.Context) {
+	result := make([]*Student, 0)
+
+	where := horm.Where{
+		"OR": []horm.Where{
+			{
+				"id >":   3,
+				"gender": 1,
+			},
+			{
+				"id <":   100,
+				"gender": 2,
+			},
+			{
+				"id >=":  999,
+				"gender": 2,
+			},
+		},
+	}
+
+	// SELECT * FROM `student` WHERE ((`id` > 3 AND `gender` = 1) OR (`gender` = 2 AND `id` < 100) OR (`id` >= 999 AND `gender` = 2)) LIMIT 100
+
+	isNil, err := horm.NewQuery("student").FindAll(where).Exec(ctx, &result)
+
+	...
+}
+```
 ### 模糊匹配
-注意：在 elastic 中 LIKE 操作符用法有些不同，详细可以看下一节。
+#### LIKE 
+在数据库引擎为 sql 相关系统时，`~` 操作符表示 LIKE。
 - 示例1：
 ```go
 func queryLike(ctx context.Context) {
@@ -1938,79 +1968,82 @@ func queryLike2(ctx context.Context) {
 }
 ```
 
-### 部分匹配（prefix、wildcard、regexp）（elastic 特有）
-在 elastic 中，`~` 操作符表示部分匹配。部分匹配分3种类型，prefix（默认）、wildcard、regexp
+#### 部分匹配（prefix、wildcard、regexp）
+不同于 sql 相关数据库，在 elastic 中，`~` 操作符表示部分匹配。部分匹配分3种类型，prefix（默认）、wildcard、regexp
 
-#### prefix 前缀查询（默认）
-类似 mysql 的 like 'cao%'，以 cao 为前缀的所有内容。
+- prefix 前缀查询（默认）
+类似 mysql 的 like 'jerry%'，以 jerry 开头的所有内容。
 ```go
-func Test(ctx context.Context) {
+func queryPrefix(ctx context.Context) {
 	result := make([]*Student, 0)
 
-	var where = horm.Where{"name ~": "cao"}  // caohao, caocao, caoxueqin...
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	var where = horm.Where{"name ~": "jerry"} // jerry, jerrycao, jerrybao...
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
 
-	if horm.IsError(err) { // 判断是否执行失败，如果是 nil returned 错误，不是真正的错误，而是空数据。
-		fmt.Printf("find student error: %v", err)
-		return
-	}
-
-	if horm.IsNil(err) { // err = nil returned，所有返回空数据都报这个错误。
-		fmt.Printf("not fine student")
-	}
+	...
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must":{
-            "prefix":{
-                "name":"cao"
-            }
+  "query": {
+    "bool": {
+      "must": {
+        "prefix": {
+          "name": "jerry"
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 
-#### wildcard 通配符查询
+##### wildcard 通配符查询
 它使用标准的 shell 通配符查询： `?` 匹配任意字符， `*` 匹配 0 或多个字符。
 ```go
-func Test(ctx context.Context) {
+func queryWildcard(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["name ~(type=wildcard)"] = "ca*h?o" // cao hao, ca li hoo, ca huo...
+	where["name ~(type=wildcard)"] = "j*r?y" // jerry, jrby, jeerby...
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	
 	...
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must":{
-            "wildcard":{
-                "name":{
-                    "value":"ca*h?o"
-                }
-            }
+  "query": {
+    "bool": {
+      "must": {
+        "wildcard": {
+          "name": {
+            "value": "j*r?y"
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 
-#### regexp 正则表达式查询
+##### regexp 正则表达式查询
 这个是正则查询，如下示例的正则表达式要求词必须以 W 开头，紧跟 0 至 9 之间的任何一个数字，然后接一或多个其他字符。
 ```go
-func Test(ctx context.Context) {
+func queryRegexp(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title ~(type=regexp)"] = "W[0-9].+"
+	where["article ~(type=regexp)"] = "W[0-9].+"
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	
 	...
 }
 ```
@@ -2018,19 +2051,23 @@ func Test(ctx context.Context) {
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must":{
-            "regexp":{
-                "title":{
-                    "value":"W[0-9].+"
-                }
-            }
+  "query": {
+    "bool": {
+      "must": {
+        "regexp": {
+          "article": {
+            "value": "W[0-9].+"
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 
-#### NOT 部分匹配排除
+##### NOT 部分匹配排除
 ```go
 func Test(ctx context.Context) {
 	result := make([]*Student, 0)
