@@ -1384,6 +1384,15 @@ type ModRet struct {
 	Reason      string                 `orm:"reason,omitempty" json:"reason,omitempty"`               // mod 失败原因
 	Extras      map[string]interface{} `orm:"extras,omitempty" json:"extras,omitempty"`               // 更多详细信息
 }
+
+type ID string
+
+func (id ID) String() string
+func (id ID) Float64() float64
+func (id ID) Int() int
+func (id ID) Int64() int64
+func (id ID) Uint()
+func (id ID) Uint64()
 ```
 
 上面语句在 es 插入了两条数据，如下，我们可以看到 updated_at 和 created_at 的时间格式，在未指定 time_fmt 的情况下，时间会被编码成 
@@ -2004,7 +2013,7 @@ func queryPrefix(ctx context.Context) {
 - wildcard 通配符查询
 <br><br>
 
-它使用标准的 shell 通配符查询： `?` 匹配任意字符， `*` 匹配 0 或多个字符。
+如下我们为 `~` 操作符加上了 `wildcard` 属性，它使用标准的 shell 通配符查询： `?` 匹配任意字符， `*` 匹配 0 或多个字符。
 ```go
 func queryWildcard(ctx context.Context) {
 	result := make([]*Student, 0)
@@ -2104,7 +2113,8 @@ func queryNotPrefix(ctx context.Context) {
 ```
 
 ### 短语匹配 match_phrase
-在 Elastic Search 中， `match_phrase` 查询首先将查询字符串解析成一个`词项列表`，然后对这些词项进行搜索，但只保留那些包含`全部 搜索词项`，且`位置`与搜索词项相同的文档。在 horm ，我们用 `?` 操作符表示短语匹配。 `!?` 表示短语匹配排除。
+在 Elastic Search 中， `match_phrase` 查询首先将查询字符串解析成一个`词项列表`，然后对这些词项进行搜索，
+但只保留那些包含`全部搜索词项`，且`位置`与搜索词项相同的文档。在 horm ，我们用 `?` 操作符表示短语匹配。 `!?` 表示短语匹配排除。
 
 ```go
 func queryMatchPhrase(ctx context.Context) {
@@ -2138,7 +2148,8 @@ func queryMatchPhrase(ctx context.Context) {
 ```
 
 #### 灵活度 slop
-精确短语匹配 或许是过于严格了。也许我们想要包含 “develop automated methods” 的文档也能够匹配 “develop methods” ，如下：
+精确短语匹配或许是过于严格了。也许我们想要包含 “develop automated methods” 的文档也能够匹配 “develop methods”，
+可以为`?`操作加上 `slop` 属性如下：
 ```go
 func queryMatchPhraseSlop(ctx context.Context) {
 	result := make([]*Student, 0)
@@ -2172,7 +2183,8 @@ func queryMatchPhraseSlop(ctx context.Context) {
 ```
 
 #### 提升权重
-我们可以通过指定 `boost` 来控制任何查询语句的相对的权重，`boost` 的默认值为 `1` ，大于 `1` 会提升一个语句的相对权重。如下，name 中包含"caohao"的话，权重更高。那么他可能会拥有更高的 `_score`评分。
+我们可以通过指定 `boost` 属性来控制任何查询语句的相对的权重，`boost` 的默认值为 `1` ，大于 `1` 会提升一个语句的相对权重。
+如下，name 中包含"caohao"的话，权重更高。那么他可能会拥有更高的 `_score`评分。
 ```go
 func queryMatchPhraseBoost(ctx context.Context) {
 	result := make([]*Student, 0)
@@ -2234,7 +2246,7 @@ func queryMatchPhraseBoost(ctx context.Context) {
 ```
 
 #### 多操作属性
-一个 where 条件可以拥有多个操作属性，通过逗号 `','` 来分隔，如下 article 有 slop 和 boost 两个条件属性。
+一个 where 操作符可以拥有多个操作属性，通过逗号 `','` 来分隔，如下 article 有 slop 和 boost 两个条件属性。
 ```go
 func queryMatchPhraseSlopBoost(ctx context.Context) {
 	result := make([]*Student, 0)
@@ -2268,7 +2280,7 @@ func queryMatchPhraseSlopBoost(ctx context.Context) {
 }
 ```
 
-#### NOT 短语匹配排除
+#### 短语匹配排除
 操作符 `!?` 表示短语匹配排除
 ```go
 func queryNotMatchPhrase(ctx context.Context) {
@@ -2300,141 +2312,200 @@ func queryNotMatchPhrase(ctx context.Context) {
   "size": 100
 }
 ```
-### 全文搜索 match（elastic 特有）
-对于 elastic ，horm 把 `*` 操作符用于表示全文检索，在全文字段中搜索到最相关的文档。
+### 全文检索 match
+当数据库为 Elastic 时，`*` 操作符表示对字段进行全文检索，在全文字段中搜索到最相关的文档。
 ```go
-func Test(ctx context.Context) {
+func queryMatch(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title *"] = "国产芯片"
+	where["article *"] = "contribution to"
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must":{
-            "match":{
-                "title":{
-                    "query":"国产芯片"
-                }
-            }
+  "query": {
+    "bool": {
+      "must": {
+        "match": {
+          "article": {
+            "query": "contribution to"
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 
 #### 提高精度 operator
-上述例子，中文分词会将`国产芯片`分为`国产`、`芯片`， 用 任意查询词项匹配文档可能会导致结果中出现不相关的长尾。这是种散弹式搜索。可能我们只想搜索包含`所有词项`的文档，也就是说，不去匹配  `国产 OR 芯片` ，而通过匹配  `国产 AND 芯片`  找到所有文档。
-
-`match`  查询还可以接受  `operator`  操作符作为输入参数，默认情况下该操作符是  `or`  。我们可以将它修改成  `and`  让所有指定词项都必须匹配：
- ```json
- func Test(ctx context.Context) {
+上述例子，中文分词会将`contribution to`分为`contribution`、`to`， 用任意查询词项匹配文档可能会导致结果中出现不相关的长尾，这是种散弹式
+搜索，可能我们只想搜索包含`所有词项`的文档，也就是说，不去匹配 `contribution OR to` ，而通过匹配 `contribution AND to`找到所有文档。
+`*` 可以加上 operator 属性，默认情况下该属性是 `or`。我们可以将它修改成 `and` 让所有指定词项都必须匹配：
+```go
+func queryMatchOperator(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title *(operator=and)"] = "国产芯片"
+	where["article *(and)"] = "contribution to"
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
 	...
 }
- ```
+```
 生成的 elastic query 条件语句 ：
  ```json
- {
-    "bool":{
-        "must":{
-            "match":{
-                "title":{
-                    "query":"国产芯片",
-                    "operator":"and"
-                }
-            }
+{
+  "query": {
+    "bool": {
+      "must": {
+        "match": {
+          "article": {
+            "operator": "and",
+            "query": "contribution to"
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 #### 控制精度 minimum_should_match
-在 所有 与 任意 间二选一有点过于非黑即白。如果用户给定 5 个查询词项，想查找只包含其中 4 个的文档，该如何处理？
-
+在所有与任意间二选一有点过于非黑即白。如果用户给定 5 个查询词项，想查找只包含其中 4 个的文档，该如何处理？
 在全文搜索的大多数应用场景下，我们既想包含那些可能相关的文档，同时又排除那些不太相关的。换句话说，我们想要处于中间某种结果。
-
-`match`  查询支持  `minimum_should_match`  最小匹配参数，这让我们可以指定必须匹配的词项数用来表示一个文档是否相关。我们可以将其设置为某个具体数字，更常用的做法是将其设置为一个百分数，因为我们无法控制用户搜索时输入的单词数量，如下，我们设置最小匹配参数为 60%，即只需要命中至少 3个词，则匹配文档。
+`*` 查询支持 `minimum_should_match` 最小匹配属性，这让我们可以指定必须匹配的词项数用来表示一个文档是否相关。
+我们可以将其设置为某个具体数字，更常用的做法是将其设置为一个百分数，因为我们无法控制用户搜索时输入的单词数量，如下，
+我们设置最小匹配参数为 40%，即只需要命中至少2个词，则匹配文档。
 
 ```go
-func Test(ctx context.Context) {
+func queryMatchMinimumShouldMatch(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title *(minimum_should_match=60%)"] = "smallhow is stockholder of jingdong"
+	where["article *(minimum_should_match=40%)"] = "contribution to lead the public"
 
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
-	...
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
+	fmt.Println(isNil, err)
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must":{
-            "match":{
-                "title":{
-                    "query":"smallhow is stockholder of jingdong",
-                    "minimum_should_match":"60%"
-                }
-            }
+  "query": {
+    "bool": {
+      "must": {
+        "match": {
+          "article": {
+            "minimum_should_match": "40%",
+            "query": "contribution to lead the public"
+          }
         }
+      }
     }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 #### 评分计算
-`bool`  查询会为每个文档计算相关度评分  `_score`  ，再将所有匹配的  `must`  和  `should`  语句的分数  `_score`  求和，最后除以  `must`  和  `should`  语句的总数。
-`must_not`  语句不会影响评分；它的作用只是将不相关的文档排除。
+`bool` 查询会为每个文档计算相关度评分 `_score`，再将所有匹配的 `must` 和 `should` 语句的分数 `_score` 求和，最后除以 `must` 和  
+`should` 语句的总数。`must_not`  语句不会影响评分；它的作用只是将不相关的文档排除。
 
 #### 提升权重
-提升权重与 `match_phrase` 的用法是一样的，也是通过指定  `boost`  来控制任何查询语句的相对的权重，  `boost`  的默认值为  `1`  ，大于  `1`  会提升一个语句的相对权重。
+提升权重与 `match_phrase` 里的用法是一样的，也是通过指定 `boost` 来控制任何查询语句的相对的权重，`boost` 的默认值为 `1`，大于 `1` 会
+提升一个语句的相对权重。如下，name 中包含"caohao"的话，权重更高。那么他可能会拥有更高的 `_score`评分。
 ```go
-func Test(ctx context.Context) {
+func queryMatchBoost(ctx context.Context) {
 	result := make([]*Student, 0)
 
 	var where = horm.Where{}
-	where["title *(boost=3)"] = "smallhow"
-	where["abstract *(boost=2)"] = "smallhow"
-	where["content *(boost=1)"] = "smallhow"
+	where["name ?(boost=3)"] = "caohao"
+	where["article ?(boost=2)"] = "work in"
+	where["exam_time ?(boost=1)"] = "15"
 
-	err := horm.NewQuery("es_student").FindAll(where).Order("_score", true).Exec(ctx, &result)
-	...
-}
-```
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
 
-#### NOT 全文搜索排除
-```go
-func Test(ctx context.Context) {
-	result := make([]*Student, 0)
-
-	var where = horm.Where{}
-	where["title !*"] = "国产芯片"
-
-	err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
 	...
 }
 ```
 生成的 elastic query 条件语句 ：
 ```json
 {
-    "bool":{
-        "must_not":{
-            "match":{
-                "title":{
-                    "query":"国产芯片"
-                }
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match_phrase": {
+            "article": {
+              "boost": 2,
+              "query": "work in"
             }
+          }
+        },
+        {
+          "match_phrase": {
+            "exam_time": {
+              "boost": 1,
+              "query": "15"
+            }
+          }
+        },
+        {
+          "match_phrase": {
+            "name": {
+              "boost": 3,
+              "query": "caohao"
+            }
+          }
         }
+      ]
     }
+  },
+  "from": 0,
+  "size": 100
+}
+```
+
+#### 全文搜索排除
+```go
+func queryNotMatch(ctx context.Context) {
+	result := make([]*Student, 0)
+
+	var where = horm.Where{}
+	where["article !*"] = "contribution to"
+
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Exec(ctx, &result)
+
+	...
+}
+```
+生成的 elastic query 条件语句 ：
+```json
+{
+  "query": {
+    "bool": {
+      "must_not": {
+        "match": {
+          "article": {
+            "query": "contribution to"
+          }
+        }
+      }
+    }
+  },
+  "from": 0,
+  "size": 100
 }
 ```
 

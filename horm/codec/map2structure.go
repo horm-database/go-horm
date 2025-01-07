@@ -30,6 +30,8 @@ type Map2Structure struct {
 }
 
 var typeString = reflect.TypeOf("")
+var typeTime1 = reflect.TypeOf(time.Time{})
+var typeTime2 = reflect.TypeOf(types.Time{})
 
 func (m *Map2Structure) Decode(src, dest interface{}) error {
 	config := &mapstructure.DecoderConfig{
@@ -41,7 +43,18 @@ func (m *Map2Structure) Decode(src, dest interface{}) error {
 			func(str reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
 				if str == typeString && types.IsTime(t) {
 					tt, err := types.ParseTime(data.(string), m.l)
-					return reflect.ValueOf(tt).Convert(t).Interface(), err
+					if err != nil {
+						return nil, err
+					}
+
+					switch t {
+					case typeTime1:
+						return tt, nil
+					case typeTime2:
+						return types.Time(tt), nil
+					default:
+						return reflect.ValueOf(tt).Convert(t).Interface(), nil //强制转化为接收类型
+					}
 				}
 
 				return data, nil
