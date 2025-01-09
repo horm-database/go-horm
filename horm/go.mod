@@ -3,6 +3,7 @@ module github.com/horm-database/go-horm/horm
 go 1.18
 
 require (
+	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/golang/protobuf v1.5.3
 	github.com/gomodule/redigo v1.8.9
 	github.com/horm-database/common v0.0.1

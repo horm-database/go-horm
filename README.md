@@ -172,7 +172,7 @@ type FieldSpec struct {
 ```
 orm 字段类型包含如下类型，具体细节可以看后面章节 `基础数据类型`：
 ```go
-var TypeDesc = map[string]Type{
+var OrmType = map[string]Type{
 	"time":   TypeTime,
 	"bytes":  TypeBytes,
 	"float":  TypeFloat,
@@ -444,7 +444,7 @@ const (
 	TypeJSON   Type = 17
 )
 
-var TypeDesc = map[string]Type{
+var OrmType = map[string]Type{
 	"time":   TypeTime,
 	"bytes":  TypeBytes,
 	"float":  TypeFloat,
@@ -463,7 +463,6 @@ var TypeDesc = map[string]Type{
 	"bool":   TypeBool,
 	"json":   TypeJSON,
 }
-
 ```
 
 我们发送请求到数据统一调度服务的时候，绝大多数情况下可以不指定数据类型，服务端也可以正常解析并执行 query 语句，但是在某些特殊情况下，
@@ -1532,7 +1531,8 @@ SQL语句：
 }
 ```
 
-## 主键查询（Elastic 的主键为 _id ）
+## 主键查询
+### FindBy
 - 示例1 mysql 主键查询：
 ```go
 func queryFindBy(ctx context.Context) {
@@ -1579,10 +1579,10 @@ SQL语句：
 SELECT * FROM `student` WHERE `identify` IN (2024080313, 2024092316)  LIMIT 100
 ```
 
-- 示例3 elastic 按照 _id 批量插入有几种方式：
-
+### Elastic 主键
+Elastic 默认在插入数据的时候会自动生成主键值，他的主键为 `_id`，按照 `_id` 批量插入有几种方式：
+- orm 标签加上 `es_id` 属性会指定字段值作为 es 的主键，如下 `id` 字段：
 ```go
-// 可以在 id 字段的 orm 标签加上 es_id，那么会把 id 字段作为 es 主键。
 type Student struct {
   Id        uint64     `orm:"id,uint64,onuniqueid,es_id" json:"id"`
   Identify  int64      `orm:"identify,int64" json:"identify"`                      //学生编号
@@ -1655,34 +1655,95 @@ func insertEsByID(ctx context.Context) {
 ]
 ```
 
-也可以直接在 Student 结构体加个 `_id` 字段。作为主键，还可以如下在 `ID()` 里面加主键：
+- 也可以如下在 `ID()` 里面指定主键：
 ```go
 func insertEsByID2(ctx context.Context) {
-	...
+	birthday, _ := time.Parse("2006-01-02", "1976-08-27")
 
-	datas := []*Student{
-		{
-			Id:       55,
-			...
-		},
-		{
-			Id:       66,
-			...
-		},
+	data := Student{
+		Id:       888,
+		Identify: 2024061211,
+		Gender:   1,
+		Age:      78,
+		Name:     "Alen Joy",
+		Score:    99.9,
+		Image:    []byte("IMAGE.PCG"),
+		Article:  "UNIX operating system and C programming language",
+		ExamTime: "16:30:00",
+		Birthday: types.Time(birthday),
 	}
 
-	modRets := make([]*proto.ModRet, 0)
-	_, err := horm.NewQuery("es_student").ID([]int{55, 66}).Insert(&datas).Exec(ctx, &modRets)
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").ID(888).Insert(&data).Exec(ctx, &modRet)
+
 	...
 }
 ```
+生成的 es 语句如下：
+```eslint
+PUT /es_student/_doc/888?op_type=create&refresh=false
+{
+    "age": 78,
+    "article": "UNIX operating system and C programming language",
+    "birthday": "1976-08-27",
+    "created_at": "2025-01-09T15:37:54.219903+08:00",
+    "exam_time": "16:30:00",
+    "gender": 1,
+    "id": 888,
+    "identify": 2024061211,
+    "image": "SU1BR0UuUENH",
+    "name": "Alen Joy",
+    "score": 99.9,
+    "updated_at": "2025-01-09T15:37:54.219914+08:00"
+}
+```
+返回结果如下：
+```json
+{
+    "id": "888",
+    "rows_affected": 1,
+    "version": 1
+}
+```
 
+- 也可以直接在 Student 结构体加个 `_id` 字段。作为主键：
+```go
+func insertEsByID3(ctx context.Context) {
+	birthday, _ := time.Parse("2006-01-02", "1976-08-27")
 
-- 示例 4 elastic 按照 _id 查询
+	type EsStudent struct {
+		EsID uint64 `orm:"_id,uint64" json:"_id"`
+		Student
+	}
+
+	data := EsStudent{
+		EsID: 999,
+		Student: Student{
+			Id:       999,
+			Identify: 2024070733,
+			Gender:   1,
+			Age:      46,
+			Name:     "Alen Robot",
+			Score:    88.3,
+			Image:    []byte("IMAGE.PCG"),
+			Article:  "Created tools and textbooks used by millions of programmers worldwide, advanced algorithms and theory underlying programming language implementation, and summarized these findings in influential books",
+			ExamTime: "12:00:00",
+			Birthday: types.Time(birthday),
+		},
+	}
+
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").Insert(&data).Exec(ctx, &modRet)
+	...
+}
+
+```
+
+- Elastic 按照 _id 查询
 ```go
 func queryByID(ctx context.Context) {
 	var result = Student{}
-	isNil, err := horm.NewQuery("es_student").ID("234062949419855873").Find().Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").ID(999).Find().Exec(ctx, &result)
 
 	...
 }
@@ -1694,7 +1755,7 @@ func queryByID(ctx context.Context) {
         "name": "es_student",
         "op": "find",
         "where": {
-            "_id": "234062949419855873"
+            "_id": 999
         }
     }
 ]
@@ -2510,113 +2571,207 @@ func queryNotMatch(ctx context.Context) {
 ```
 
 ## 分组、聚合（暂未支持 elastic 的聚合）
-### GROUP BY
-通过 GroupBy("column" ...) 加上 GROUP BY 语句，支持一个或多个参数。
+### GROUP
+通过 Group(group ...string) 支持分组查询。如下查看大于10岁的学生中，各个性别、年龄段分组的学生总数和平均分：
 ```go
-func Test(ctx context.Context) {
+func queryGroupBy(ctx context.Context) {
 	result := make([]map[string]interface{}, 0)
 
-	var where = horm.Where{"age>": 20}
+	var where = horm.Where{"age >": 10}
 
-	err := horm.NewQuery("student").Column("sex,age,count(1) as cnt").
-		FindAll(where).GroupBy("sex", "age").Exec(ctx, &result)
+	isNil, err := horm.NewQuery("student").
+		Column("gender", "age", "count(1) as cnt", "avg(score) as score_avg").
+		FindAll(where).Group("gender", "age").Exec(ctx, &result)
 
-	// SELECT sex,age,count(1) as cnt FROM `student` WHERE `age` > 20  GROUP BY `sex`,`age` LIMIT 100
+	// SELECT `gender`, `age`, count(1) as cnt, avg(score) as score_avg FROM `student` WHERE  `age` > 10  GROUP BY `gender`,`age` LIMIT 100
 	...
 }
 ```
 查询结果：
 ```json
 [
-    {
-        "sex":"male",
-        "age":23,
-        "cnt":3
-    },
-    {
-        "sex":"male",
-        "age":24,
-        "cnt":1
-    },
-    {
-        "sex":"male",
-        "age":22,
-        "cnt":3
-    },
-    {
-        "sex":"male",
-        "age":25,
-        "cnt":1
-    }
+  {
+    "gender": 1,
+    "age": 23,
+    "cnt": 1,
+    "score_avg": 91.5
+  },
+  {
+    "gender": 1,
+    "age": 17,
+    "cnt": 1,
+    "score_avg": 82.5
+  }
 ]
 ```
 
 ### HAVING
-Having 函数参数与 where 条件一样 ，两者生成 SQL 语法一致。
+有些场景，我们需要在 group by 分组之后，根据分组聚合数据进行再次过滤，这时候我们需要用到 having，例如下面我们需要查询平均分大于90分的
+年龄段、性别分组的学生总数和平均分，Having 函数的参数与 where 条件一样，解析规则也是一样。
 
 ```go
-func Test(ctx context.Context) {
+func queryGroupByHaving(ctx context.Context) {
 	result := make([]map[string]interface{}, 0)
 
-	var where = horm.Where{"age>": 20}
-	var having = horm.Where{"cnt>": 2}
+	isNil, err := horm.NewQuery("student").
+		Column("gender", "age", "count(1) as cnt", "avg(score) as score_avg").
+		FindAll().Group("gender", "age").
+		Having(horm.Where{"score_avg >": 90}).Exec(ctx, &result)
 
-	err := horm.NewQuery("student").Column("sex,age,count(1) as cnt").
-		FindAll(where).GroupBy("sex", "age").Having(having).Exec(ctx, &result)
-	// SELECT sex,age,count(1) as cnt FROM `student` WHERE `age` > 20 GROUP BY `sex`,`age` HAVING `cnt` > 2  LIMIT 100
+	// SELECT `gender`, `age`, count(1) as cnt, avg(score) as score_avg FROM `student` GROUP BY `gender`,`age` HAVING  `score_avg` > 90  LIMIT 100
 	...
 }
-```
 
-查询结果：<br>
+```
 
 ## 排序与分页
 ### ORDER 排序
 通过 `Order` 函数指定排序。
 ```go
-horm.NewQuery("student").FindAll().Order("age") //ORDER BY age ASC
+func queryOrder(ctx context.Context) {
+	var result = []*Student{}
+	isNil, err := horm.NewQuery("student").FindAll().Order("+age", "-score").Exec(ctx, &result)       // ORDER BY age ASC, score DESC
+	isNil, err = horm.NewQuery("student").FindAll().Order("age asc", "score desc").Exec(ctx, &result) // ORDER BY age ASC, score DESC
+	isNil, err = horm.NewQuery("student").FindAll().Order("age").Exec(ctx, &result)                   // ORDER BY age
 
-horm.NewQuery("student").FindAll().Order("age", true) //ORDER BY age DESC
-
-horm.NewQuery("student").FindAll().Order("age DESC", "score ASC") //ORDER BY age DESC, score ASC
+	...
+}
 ```
 
-elastic 按照相关性评分排序
+Elastic 按照相关性评分排序：
 ```go
-horm.NewQuery("es_student").FindAll().Order("_score", true) //ORDER BY _score DESC
+func queryOrder2(ctx context.Context) {
+	var result = []*Student{}
+
+	where := horm.Where{"article *": "contribution to"}
+	isNil, err := horm.NewQuery("es_student").FindAll(where).Order("_score desc").Exec(ctx, &result)
+
+	...
+}
+```
+请求如下：
+```json
+{
+    "query": {
+        "bool": {
+            "must": {
+                "match": {
+                    "article": {
+                        "query": "contribution to"
+                    }
+                }
+            }
+        }
+    },
+    "from": 0,
+    "size": 100,
+    "sort": [
+        {
+            "_score": {
+                "order": "desc"
+            }
+        }
+    ]
+}
+```
+返回如下，根据 _elastic._score 全文检索匹配相关性评分从高到底排序。
+```json
+[
+    {
+        "exam_time": "15:30:00",
+        "age": 39,
+        "article": "contribution to leading the public into the era of hyper-connectivity",
+        "created_at": "2025-01-05T21:22:35.821669+08:00",
+        "gender": 2,
+        "score": 93.8,
+        "_elastic": {
+            "_score": 2.1302004,
+            "_index": "es_student",
+            "_id": "234062949419855873"
+        },
+        "birthday": "1976-08-27",
+        "id": 234062949419855873,
+        "identify": 2024061211,
+        "image": "SU1BR0UuUENH",
+        "name": "metcalfe",
+        "updated_at": "2025-01-05T21:22:35.821654+08:00"
+    },
+    {
+        "article": "contributions to deep learning in artificial intelligence",
+        "exam_time": "15:30:00",
+        "identify": 2024092316,
+        "image": "SU1BR0UuUENH",
+        "updated_at": "2025-01-05T20:33:33.041235+08:00",
+        "gender": 1,
+        "id": 234050606505930753,
+        "name": "jerry",
+        "_elastic": {
+            "_score": 0.7857686,
+            "_index": "es_student",
+            "_id": "zqR0NpQBT1ym-Bx53K4b"
+        },
+        "age": 17,
+        "created_at": "2025-01-05T20:33:33.04126+08:00",
+        "score": 82.5,
+        "birthday": "1995-03-24"
+    },
+    {
+        "article": "develop automated methods to detect design errors in computer hardware and software",
+        "_elastic": {
+            "_score": 0.6358339,
+            "_index": "es_student",
+            "_id": "234062949419855874"
+        },
+        "created_at": "2025-01-05T21:22:35.82168+08:00",
+        "exam_time": "15:30:00",
+        "identify": 2024070733,
+        "image": "SU1BR0UuUENH",
+        "birthday": "1976-08-27",
+        "gender": 2,
+        "id": 234062949419855874,
+        "age": 36,
+        "name": "emerson",
+        "score": 79.9,
+        "updated_at": "2025-01-05T21:22:35.821675+08:00"
+    }
+]
 ```
 
 ### LIMIT、OFFSET
 通过 `Limit` 函数去指定 limit 、offset 参数。
 ```go
-horm.NewQuery("student").FindAll().Limit(20) // LIMIT 20
+func queryLimitSize(ctx context.Context) {
+	var result = []*Student{}
+	isNil, err := horm.NewQuery("student").FindAll().Limit(10).Exec(ctx, &result)    // LIMIT 10
+	isNil, err = horm.NewQuery("student").FindAll().Limit(10, 30).Exec(ctx, &result) // LIMIT 10 OFFSET 30
 
-horm.NewQuery("student").FindAll().Limit(20, 50) // LIMIT 20 OFFSET 50
-```
-
-### 分页 PAGE
-为了方便分页数据的返回，提供了分页函数 `Page`，第一个参数为`请求页数`，从1开始，第二个参数为`每页大小`。
-
-分页返回，必须得重新定义返回结构，加入分页返回信息，将列表数据放入 data 域，如下：
-```go
-func Test(ctx context.Context) {
-	type pageStudents struct {
-		Total     uint64     `json:"total"`      //总数
-		TotalPage uint32     `json:"total_page"` //总页数
-		Page      uint32     `json:"page"`       //当前分页
-		PageSize  uint32     `json:"page_size"`  //每页大小
-		Data      []*Student `json:"data"`       //数据
-	}
-
-	result := pageStudents{}
-
-	err := horm.NewQuery("student").FindAll().Page(2, 5).Exec(ctx, &result)
 	...
 }
 ```
 
+### 分页 PAGE
+通过 Page(page, pageSize int) 函数请求分页数据，统一接入服务返回的分页数据结构如下，具体案例可以参考查询模式-单查询单元-分页返回章节。
 
-## 返回结果高亮（elastic 特有）
+```go
+// PageResult 当 page > 1 时会返回分页结果
+type PageResult struct {
+	Detail *Detail       `orm:"detail,omitempty" json:"detail,omitempty"` // 查询细节信息
+	Data   []interface{} `orm:"data,omitempty" json:"data,omitempty"`     // 分页结果
+}
+
+// Detail 其他查询细节信息，例如 分页信息、滚动翻页信息、其他信息等。
+type Detail struct {
+	Total     uint64                 `orm:"total" json:"total"`                               // 总数
+	TotalPage uint32                 `orm:"total_page,omitempty" json:"total_page,omitempty"` // 总页数
+	Page      int                    `orm:"page,omitempty" json:"page,omitempty"`             // 当前分页
+	Size      int                    `orm:"size,omitempty" json:"size,omitempty"`             // 每页大小
+	Scroll    *Scroll                `orm:"scroll,omitempty" json:"scroll,omitempty"`         // 滚动翻页信息
+	Extras    map[string]interface{} `orm:"extras,omitempty" json:"extras,omitempty"`         // 更多详细信息
+}
+```
+
+## 返回结果高亮
+在 Elastic Search 中，我们可以请求 es 将我们的检索结果中的关键词打上高亮标签返回。
 - 示例1，用高亮结果替换原内容，多个高亮结果用 `</br>` 分隔：
 ```go
 func Test(ctx context.Context) {
@@ -2842,7 +2997,7 @@ func Test(ctx context.Context) {
 
 ### 批量插入数据
 `InsertStructs`函数用于插入多条数据。
-- 示例 1，MySQL 插入新数据，返回 `horm.AffectedInfo` ，如果不关心返回，可以不传 result：
+- 示例 1，MySQL 插入新数据，返回 `horm.AffectedInfo`，如果不关心返回，可以不传 result：
 ```go
 func Test(ctx context.Context) {
 	datas := []*Student{

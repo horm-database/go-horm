@@ -199,7 +199,7 @@ func (dc *defaultCodec) decodeMapSlice(src interface{}, dest interface{}) (err e
 func (dc *defaultCodec) decodeMap2Struct(src map[string]string, rv reflect.Value) error {
 	ss := structs.GetStructSpec(dc.GetTag(), rv.Type())
 	for name, s := range src {
-		fs := ss.ColumnSpec(name)
+		fs := ss.Cm[name]
 		if fs == nil {
 			continue
 		}
@@ -254,7 +254,7 @@ func (dc *defaultCodec) decodeSlice2Struct(src []interface{}, rv reflect.Value) 
 		if err != nil {
 			return err
 		}
-		fs := ss.ColumnSpec(name)
+		fs := ss.Cm[name]
 		if fs == nil {
 			continue
 		}

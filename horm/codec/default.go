@@ -365,7 +365,7 @@ func (dc *defaultCodec) setStruct(val interface{}, isInsert bool) map[string]int
 			continue
 		}
 
-		iv := v.Field(fs.I)
+		iv := v.FieldByIndex(fs.Index)
 		isEmpty := types.IsEmpty(iv)
 
 		if dc.omitEmpty && (fs.OmitEmpty ||
@@ -417,7 +417,7 @@ func (dc *defaultCodec) setStructs(val interface{}, isInsert bool) []map[string]
 			}
 
 			if ignore := ignores[name]; !ignore {
-				iv := kv.Field(fs.I)
+				iv := kv.FieldByIndex(fs.Index)
 				isEmpty := types.IsEmpty(iv)
 
 				//自动插入当前时间，仅在值为零值时才自动赋值
@@ -448,8 +448,8 @@ func (dc *defaultCodec) updateStruct(val interface{}) map[string]interface{} {
 
 	data := make(map[string]interface{})
 
-	for name, fs := range ss.M {
-		iv := v.FieldByName(name)
+	for _, fs := range ss.M {
+		iv := v.FieldByIndex(fs.Index)
 
 		if dc.omitEmpty && (fs.OmitUpdateEmpty || fs.OmitEmpty) && types.IsEmpty(iv) { //UPDATE 忽略零值
 			continue
