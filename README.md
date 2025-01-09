@@ -2771,100 +2771,173 @@ type Detail struct {
 ```
 
 ## 返回结果高亮
-在 Elastic Search 中，我们可以请求 es 将我们的检索结果中的关键词打上高亮标签返回。
-- 示例1，用高亮结果替换原内容，多个高亮结果用 `</br>` 分隔：
+在 Elastic Search 中，我们可以请求 es 将我们的检索结果中的关键词打上高亮标签返回，我们可以针对不同的字段打不同的标签，如下：
 ```go
-func Test(ctx context.Context) {
+func queryHighlight(ctx context.Context) {
 	var where = horm.Where{}
-	where["title *"] = "elastic"
-
-	highLight := horm.HighLight{
-		Fields:   []string{"title"},
-		PreTags:  "<highlight>",
-		PostTags: "</highlight>",
-	}
+	where["article *"] = "contribution to"
+	where["exam_time *"] = "15"
 
 	result := make([]*Student, 0)
-	err := horm.NewQuery("es_student").FindAll(where).HighLight(&highLight).Exec(ctx, &result)
+	isNil, err := horm.NewQuery("es_student").FindAll(where).
+		HighLight("article", "<red>", "</red>").
+		HighLight("exam_time", "<yellow>", "</yellow>").Exec(ctx, &result)
+
 	...
 }
 ```
-查询结果：
+生成的请求如下：
 ```json
 [
-    {
-        "userid":1552,
-        "class_id":3,
-        "sex":"male",
-        "age":28,
-        "name":"smallhowcao",
-        "title":"在他找工作的过程中，为了给妻子构建一个食谱的搜索引擎，他开始构建一个早期版本的 <highlight>elastic</highlight> 。</br>直接基于Lucene工作会比较困难，所以Shay开始抽象 <highlight>elastic</highlight> 代码以便lava程序员可以在应用中添加搜索功能。他发布了他的第一个开源项目，叫做“Compass”。</br>然后他决定重写Compass库使其成为一个独立的服务叫做 <highlight>elastic</highlight> search。</br>第一个公开版本出现在2010年2月，在那之后 <highlight>elastic</highlight> 已经成为Github上最受欢迎的项目之一，代码贡献者超过300人。</br>一家主营 <highlight>elastic</highlight> 的公司就此成立，他们一边提供商业支持一边开发新功能，不过 <highlight>elastic</highlight> 将永远开源且对所有人可用。\nShay的妻子依旧等待着她的食谱搜索……</br>"
+  {
+    "name": "es_student",
+    "op": "find_all",
+    "where": {
+      "exam_time *": "15",
+      "article *": "contribution to"
     },
-    {
-        "userid":658,
-        "class_id":1,
-        "sex":"male",
-        "age":28,
-        "name":"smallhowcao",
-        "title":"以搜索引擎闻名世界的开源软件提供商 <highlight>elastic</highlight> 。\n2012年成立，总部位于美国的山景城。\n2018年10月上市，目前市值近50亿美金。</br><highlight>elastic</highlight> 公司致力于结构化和非结构化数据的分布式实时全文搜索及分析，典型应用场景 包括日志管理、分析、系统指标分析、安全分析、企业搜索、网站搜索、应用搜索、应用性能管理APM等。</br><highlight>elastic</highlight> 公司产品包括享誉业界的 <highlight>elastic</highlight> stack(ES，ELK Stack)、具备多种高级特性的商业扩展插件、云服务 <highlight>elastic</highlight> cloud 等。</br>"
+    "size": 100,
+    "params": {
+      "highlights": [
+        {
+          "field": "article",
+          "pre_tag": "<red>",
+          "post_tag": "</red>"
+        },
+        {
+          "field": "exam_time",
+          "pre_tag": "<yellow>",
+          "post_tag": "</yellow>"
+        }
+      ]
     }
+  }
 ]
 ```
-
-- 示例2：高亮结果单独返回：
-  我们会将字段以 `key_highlight` 的方式追加到 map 里面，如下 `title` 的高亮结果存于 `title_highlight` 中。
-```go
-func Test(ctx context.Context) {
-	var where = horm.Where{}
-	where["title *"] = "elastic"
-
-	highLight := horm.HighLight{
-		Fields:          []string{"title"},
-		PreTags:         "<highlight>",
-		PostTags:        "</highlight>",
-		ReturnHighLight: horm.ReturnHighLightAlone,
-	}
-	
-	type highLightStudent struct {
-		Student
-		HighLight []string `json:"title_highlight"`
-	}
-	highLightResult := make([]*highLightStudent, 0)
-
-	err := horm.NewQuery("es_student").FindAll(where).HighLight(&highLight).Exec(ctx, &highLightResult)
-	...
+生成的 es 请求如下：
+```json
+{
+    "highlight": {
+        "fields": {
+            "article": {
+                "post_tags": [
+                    "</red>"
+                ],
+                "pre_tags": [
+                    "<red>"
+                ]
+            },
+            "exam_time": {
+                "post_tags": [
+                    "</yellow>"
+                ],
+                "pre_tags": [
+                    "<yellow>"
+                ]
+            }
+        }
+    },
+    "query": {
+        "bool": {
+            "must": [
+                {
+                    "match": {
+                        "article": {
+                            "query": "contribution to"
+                        }
+                    }
+                },
+                {
+                    "match": {
+                        "exam_time": {
+                            "query": "15"
+                        }
+                    }
+                }
+            ]
+        }
+    },
+  "from": 0,
+    "size": 100
 }
 ```
 
-查询结果：
+返回结果如下：
 ```json
 [
     {
-        "userid":1552,
-        "class_id":3,
-        "sex":"male",
-        "age":28,
-        "name":"smallhowcao",
-        "title":"多年前，一个叫做Shay Banon的刚结婚不久的失业开发者，由于妻子要去伦敦学习厨师，他便跟着也去了。在他找工作的过程中，为了给妻子构建一个食谱的搜索引擎，他开始构建一个早期版本的 elastic 。\n直接基于Lucene工作会比较困难，所以Shay开始抽象 elastic 代码以便lava程序员可以在应用中添加搜索功能。他发布了他的第一个开源项目，叫做“Compass”。\n后来Shay找到一份工作，这份工作处在高性能和内存数据网格的分布式环境中，因此高性能的、实时的、分布式的搜索引擎也是理所当然需要的。然后他决定重写Compass库使其成为一个独立的服务叫做 elastic search。\n第一个公开版本出现在2010年2月，在那之后 elastic 已经成为Github上最受欢迎的项目之一，代码贡献者超过300人。一家主营 elastic 的公司就此成立，他们一边提供商业支持一边开发新功能，不过 elastic 将永远开源且对所有人可用。\nShay的妻子依旧等待着她的食谱搜索……",
-        "title_highlight":[
-            "在他找工作的过程中，为了给妻子构建一个食谱的搜索引擎，他开始构建一个早期版本的 <highlight>elastic</highlight> 。",
-            "直接基于Lucene工作会比较困难，所以Shay开始抽象 <highlight>elastic</highlight> 代码以便lava程序员可以在应用中添加搜索功能。他发布了他的第一个开源项目，叫做“Compass”。",
-            "然后他决定重写Compass库使其成为一个独立的服务叫做 <highlight>elastic</highlight> search。",
-            "第一个公开版本出现在2010年2月，在那之后 <highlight>elastic</highlight> 已经成为Github上最受欢迎的项目之一，代码贡献者超过300人。",
-            "一家主营 <highlight>elastic</highlight> 的公司就此成立，他们一边提供商业支持一边开发新功能，不过 <highlight>elastic</highlight> 将永远开源且对所有人可用。\nShay的妻子依旧等待着她的食谱搜索……"
-        ]
+        "age": 39,
+        "exam_time": "15:30:00",
+        "score": 93.8,
+        "highlight_article": [
+            "<red>contribution</red> <red>to</red> leading the public into the era of hyper-connectivity"
+        ],
+        "highlight_exam_time": [
+            "<yellow>15</yellow>:30:00"
+        ],
+        "gender": 2,
+        "id": 234062949419855873,
+        "name": "metcalfe",
+        "_elastic": {
+            "_score": 3.4667747,
+            "_index": "es_student",
+            "_id": "234062949419855873"
+        },
+        "image": "SU1BR0UuUENH",
+        "updated_at": "2025-01-05T21:22:35.821654+08:00",
+        "article": "contribution to leading the public into the era of hyper-connectivity",
+        "birthday": "1976-08-27",
+        "created_at": "2025-01-05T21:22:35.821669+08:00",
+        "identify": 2024061211
     },
     {
-        "userid":658,
-        "class_id":1,
-        "sex":"male",
-        "age":28,
-        "name":"smallhowcao",
-        "title":"以搜索引擎闻名世界的开源软件提供商 elastic 。\n2012年成立，总部位于美国的山景城。\n2018年10月上市，目前市值近50亿美金。\n公司员工1000+人分布在全世界80多个国家，以最快的效率服务于我们的客户。\n100000+社区参与者，3亿5千万下载使用量，5000+商业客户持续订阅。\nelastic 公司致力于结构化和非结构化数据的分布式实时全文搜索及分析，典型应用场景 包括日志管理、分析、系统指标分析、安全分析、企业搜索、网站搜索、应用搜索、应用性能管理APM等。\nelastic 公司产品包括享誉业界的 elastic stack(ES，ELK Stack)、具备多种高级特性的商业扩展插件、云服务 elastic cloud 等。",
-        "title_highlight":[
-            "以搜索引擎闻名世界的开源软件提供商 <highlight>elastic</highlight> 。\n2012年成立，总部位于美国的山景城。\n2018年10月上市，目前市值近50亿美金。",
-            "<highlight>elastic</highlight> 公司致力于结构化和非结构化数据的分布式实时全文搜索及分析，典型应用场景 包括日志管理、分析、系统指标分析、安全分析、企业搜索、网站搜索、应用搜索、应用性能管理APM等。",
-            "<highlight>elastic</highlight> 公司产品包括享誉业界的 <highlight>elastic</highlight> stack(ES，ELK Stack)、具备多种高级特性的商业扩展插件、云服务 <highlight>elastic</highlight> cloud 等。"
+        "age": 17,
+        "created_at": "2025-01-05T20:33:33.04126+08:00",
+        "gender": 1,
+        "identify": 2024092316,
+        "article": "contributions to deep learning in artificial intelligence",
+        "name": "jerry",
+        "highlight_exam_time": [
+            "<yellow>15</yellow>:30:00"
+        ],
+        "birthday": "1995-03-24",
+        "exam_time": "15:30:00",
+        "image": "SU1BR0UuUENH",
+        "score": 82.5,
+        "highlight_article": [
+            "contributions <red>to</red> deep learning in artificial intelligence"
+        ],
+        "id": 234050606505930753,
+        "updated_at": "2025-01-05T20:33:33.041235+08:00",
+        "_elastic": {
+            "_score": 1.8139606,
+            "_index": "es_student",
+            "_id": "zqR0NpQBT1ym-Bx53K4b"
+        }
+    },
+    {
+        "identify": 2024070733,
+        "image": "SU1BR0UuUENH",
+        "_elastic": {
+            "_score": 1.6168463,
+            "_index": "es_student",
+            "_id": "234062949419855874"
+        },
+        "age": 36,
+        "birthday": "1976-08-27",
+        "updated_at": "2025-01-05T21:22:35.821675+08:00",
+        "highlight_article": [
+            "develop automated methods <red>to</red> detect design errors in computer hardware and software"
+        ],
+        "article": "develop automated methods to detect design errors in computer hardware and software",
+        "created_at": "2025-01-05T21:22:35.82168+08:00",
+        "exam_time": "15:30:00",
+        "gender": 2,
+        "id": 234062949419855874,
+        "name": "emerson",
+        "score": 79.9,
+        "highlight_exam_time": [
+            "<yellow>15</yellow>:30:00"
         ]
     }
 ]
