@@ -2814,7 +2814,7 @@ func queryHighlight(ctx context.Context) {
   }
 ]
 ```
-生成的 es 请求如下：
+在数据统一接入服务会被转化为如下 Elastic 请求：
 ```json
 {
     "highlight": {
@@ -2862,7 +2862,7 @@ func queryHighlight(ctx context.Context) {
 }
 ```
 
-返回结果如下：
+返回结果如下，我们会在高亮字段前面加 `highlight_` 表示该字段为高亮结果，他是一个字符串数组：
 ```json
 [
     {
