@@ -459,7 +459,7 @@ var OrmType = map[string]Type{
 我们发送请求到数据统一调度服务的时候，绝大多数情况下可以不指定数据类型，服务端也可以正常解析并执行 query 语句，但是在某些特殊情况下，
 比如 clickhouse 对类型有强限制，又或者字段是一个超大 uint64 整数，json 编码之后请求服务端，由于 json 的基础类型只包含 string、 
 number(当成float64)、bool，数字在服务端会被解析为 float64，存在精度丢失问题，所以在 golang horm 中，当类型为 time、[]byte、
-int、 int8~int64、uint、uint8~uint64 时，需要在执行单元 data_type 字段里将数据类型带上，当然 horm-sdk 会自动帮我们处理，如下案例：
+int、 int8`~`int64、uint、uint8`~`uint64 时，需要在执行单元 data_type 字段里将数据类型带上，当然 horm-sdk 会自动帮我们处理，如下案例：
 
 ```go
 import (
