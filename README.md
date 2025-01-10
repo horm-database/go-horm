@@ -30,7 +30,7 @@ const ( // 后端服务支持的数据库类型
 * horm 支持 GO、NODE、JAVA、C++、PHP。
 
 #  示例表与结构体
-建表语句：
+## 示例表
 ```sql
 CREATE TABLE `student` (
     `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -77,7 +77,7 @@ CREATE TABLE `score_rank_reward` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分数排名奖励'
 ```
 
-## golang 结构体：
+## Golang 结构体：
 ```go
 import (
   "time"
@@ -129,48 +129,27 @@ type ScoreRankReward struct {
 ```
 
 ## 结构体标签
-支持通过 golang 结构体标签来描述数据库表字段，标签以 orm 开头，第一个参数为执行单元名，第二个参数为 orm 字段类型，其他为属性，例如：
+支持通过 golang 结构体标签来描述数据库表字段，以及如何将结构体转化为请求，如下 Student 结构体，标签以 `orm` 开头，第一个参数为表字段名，
+第二个参数为 orm 类型，其他则是属性，horm 会将结构体的 `orm` 标签解析后，将字段、类型、属性信息缓存到内存，用于解析结构体：
 ```golang
 //示例结构体
 type Student struct {
-  Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`              //onuniqueid 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，每个实例不一样。否则可能会有冲突，当然，你也可以采用数据库的自增id作为主键，这时候，最好加上 omitempty 。
+  Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`        
   Identify  int64      `orm:"identify,int64" json:"identify"`                     
-  Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`   //omitinsertempty 插入忽略零值，即在插入数据的时候，如果 Gender 字段为零值，则 insert sql 语句会忽略这个字段。
-  Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`        //omitreplaceempty 替换忽略零值 
-  Name      string     `orm:"name,string,omitupdateempty" json:"name"`     //omitupdateempty 更新忽略零值       
+  Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`   
+  Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`     
+  Name      string     `orm:"name,string,omitupdateempty" json:"name"`    
   Score     float64    `orm:"score,double,omitempty" json:"score"`            
   Image     []byte     `orm:"image,bytes,omitempty" json:"image"`               
-  Article   string     `orm:"article,string,omitempty" json:"article"`     //omitempty 忽略零值，= omitinsertempty + omitreplaceempty + omitupdateempty 表示插入、替换、更新都忽略零值，如 Auto Increment 需要
+  Article   string     `orm:"article,string,omitempty" json:"article"`     
   ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`      
-  Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` //time_fmt 会使得请求的时候，会将 birthday 转化为 `2006-01-02` 格式，在服务端返回字符串是 "2006-01-02" 格式时，只有类型 types.Time 才能正确接收结果。
-  CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`      //oncreatetime 插入时自动初始化为当前时间
-  UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //onupdatetime 自动修改为当前时间
+  Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` 
+  CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`   
+  UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"` 
 }
 ```
-horm 会将上面结构体的 orm 标签解析后，每个字段的属性存入下面的结构体中，并缓存到内存：
 
-```go
-// FieldSpec body 标签解析结果
-type FieldSpec struct {
-  Tag              string // tag
-  Name             string // 字段名
-  I                int    // 位置
-  Index            []int
-  Column           string  // 对应数据库字段名
-  Type             Type    // orm 类型，不同数据库会映射到不同类型
-  OmitEmpty        bool    // 忽略零值
-  OmitInsertEmpty  bool    // INSERT 时忽略零值
-  OmitReplaceEmpty bool    // REPLACE 时忽略零值
-  OmitUpdateEmpty  bool    // UPDATE 时忽略零值
-  OnCreateTime     bool    // INSERT/REPLACE 时初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型
-  OnUpdateTime     bool    // 数据变更时修改为当前时间，具体格式根据 Type 决定，这里我推荐数据库自带的时间戳更新功能。
-  TimeFmt          string  // 当字段底层类型为 time.Time 时，格式化时间，仅针对请求格式化，返回数据的解析在 codec 内。
-  OnUniqueID       bool    // 新增数据时候，如果字段为空值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突
-  EsID             bool   // 是否 es 主键 _id
-}
-
-```
-orm 字段类型包含如下类型，具体细节可以看后面章节 `基础数据类型`：
+`orm` 字段类型包含如下类型，更多详情参考章节 `基础数据类型`：
 ```go
 var OrmType = map[string]Type{
 	"time":   TypeTime,
@@ -192,6 +171,18 @@ var OrmType = map[string]Type{
 	"json":   TypeJSON,
 }
 ```
+
+`orm` 标签目前支持的字段属性如下：
+- `omitinsertempty`: INSERT 时忽略零值，在插入数据的时候，如果字段为零值，这该字段被忽略插入，让其取数据库表默认值。
+- `omitreplaceempty`: REPLACE 时忽略零值，在替换数据的时候，如果字段为零值，这该字段被忽略替换。
+- `omitupdateempty`: UPDATE 时忽略零值，在更新数据的时候，如果字段为零值，这该字段被忽略更新，保持原值。
+- `omitempty`: 数据新增、替换、修改时都忽略零值，= omitinsertempty + omitreplaceempty + omitupdateempty 。
+- `oncreatetime`: 在 INSERT/REPLACE 数据时，如果该字段为零值，初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型。
+- `onupdatetime`: 在 INSERT/REPLACE/UPDATE 数据时，如果该字段为零值，初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型。
+- `time_fmt`: 当字段底层类型为 time.Time 时，格式化时间，仅针对请求格式化，返回数据的解析在 codec 内。例如上面的 birthday 字段，time_fmt 会使得请求的时候，会将 birthday 转化为 `2006-01-02` 格式，在服务端返回字符串是 "2006-01-02" 格式时，只有类型 types.Time 才能正确接收结果。
+- `onuniqueid`: 新增数据时候，如果字段为零值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突，当然，你也可以采用数据库的自增id作为主键，这时候，最好加上 omitempty。
+- `es_id`: 当出现该属性，表示本字段的值作为 es 主键，那么在插入数据的时候，我们会加入 `_id` 字段并赋值为该字段值。数据统一存储系统会将 `_id` 提取并作为该数据的主键。
+
 
 # horm 客户端
 为了访问数据统一接入服务，我们需要创建 Client 来与服务端建立连接，horm 提供了2种方式来指定 Query 语句使用的客户端。
@@ -2771,16 +2762,23 @@ type Detail struct {
 ```
 
 ## 返回结果高亮
-在 Elastic Search 中，我们可以请求 es 将我们的检索结果中的关键词打上高亮标签返回，我们可以针对不同的字段打不同的标签，如下：
+在 Elastic Search 中，我们可以请求 es 将我们的检索结果中的关键词打上高亮标签返回，我们可以针对不同的字段打不同的标签，第四个参数 replace 
+是一个可选参数，在我们不需要原字段返回，而只需要返回带标签的内容时，将 replace 置为 true，可以减少输出内容，避免返回过大，如下：
 ```go
 func queryHighlight(ctx context.Context) {
 	var where = horm.Where{}
 	where["article *"] = "contribution to"
 	where["exam_time *"] = "15"
 
-	result := make([]*Student, 0)
+	type HighLightStudent struct {
+		Student
+		HighlightArticle  []string `orm:"highlight_article,string,omitempty" json:"highlight_article"`     //publish article
+		HighlightExamTime []string `orm:"highlight_exam_time,string,omitempty" json:"highlight_exam_time"` //考试时间
+	}
+
+	result := make([]*HighLightStudent, 0)
 	isNil, err := horm.NewQuery("es_student").FindAll(where).
-		HighLight("article", "<red>", "</red>").
+		HighLight("article", "<red>", "</red>", true).
 		HighLight("exam_time", "<yellow>", "</yellow>").Exec(ctx, &result)
 
 	...
@@ -2788,31 +2786,30 @@ func queryHighlight(ctx context.Context) {
 ```
 生成的请求如下：
 ```json
-[
-  {
-    "name": "es_student",
-    "op": "find_all",
-    "where": {
-      "exam_time *": "15",
-      "article *": "contribution to"
-    },
-    "size": 100,
-    "params": {
-      "highlights": [
-        {
-          "field": "article",
-          "pre_tag": "<red>",
-          "post_tag": "</red>"
-        },
-        {
-          "field": "exam_time",
-          "pre_tag": "<yellow>",
-          "post_tag": "</yellow>"
-        }
-      ]
-    }
+{
+  "name": "es_student",
+  "op": "find_all",
+  "where": {
+    "article *": "contribution to",
+    "exam_time *": "15"
+  },
+  "size": 100,
+  "params": {
+    "highlights": [
+      {
+        "field": "article",
+        "pre_tag": "<red>",
+        "post_tag": "</red>",
+        "replace": true
+      },
+      {
+        "field": "exam_time",
+        "pre_tag": "<yellow>",
+        "post_tag": "</yellow>"
+      }
+    ]
   }
-]
+}
 ```
 在数据统一接入服务会被转化为如下 Elastic 请求：
 ```json
@@ -2862,125 +2859,168 @@ func queryHighlight(ctx context.Context) {
 }
 ```
 
-返回结果如下，我们会在高亮字段前面加 `highlight_` 表示该字段为高亮结果，他是一个字符串数组：
+返回结果如下，我们会在高亮字段前面加 `highlight_` 表示该字段为高亮结果，他是一个字符串数组，在结果中我们可以看到，
+原来的 article 并未返回，因为 replace 为 true：
 ```json
 [
-    {
-        "age": 39,
-        "exam_time": "15:30:00",
-        "score": 93.8,
-        "highlight_article": [
-            "<red>contribution</red> <red>to</red> leading the public into the era of hyper-connectivity"
-        ],
-        "highlight_exam_time": [
-            "<yellow>15</yellow>:30:00"
-        ],
-        "gender": 2,
-        "id": 234062949419855873,
-        "name": "metcalfe",
-        "_elastic": {
-            "_score": 3.4667747,
-            "_index": "es_student",
-            "_id": "234062949419855873"
-        },
-        "image": "SU1BR0UuUENH",
-        "updated_at": "2025-01-05T21:22:35.821654+08:00",
-        "article": "contribution to leading the public into the era of hyper-connectivity",
-        "birthday": "1976-08-27",
-        "created_at": "2025-01-05T21:22:35.821669+08:00",
-        "identify": 2024061211
+  {
+    "_elastic": {
+      "_score": 3.4667747,
+      "_index": "es_student",
+      "_id": "234062949419855873"
     },
-    {
-        "age": 17,
-        "created_at": "2025-01-05T20:33:33.04126+08:00",
-        "gender": 1,
-        "identify": 2024092316,
-        "article": "contributions to deep learning in artificial intelligence",
-        "name": "jerry",
-        "highlight_exam_time": [
-            "<yellow>15</yellow>:30:00"
-        ],
-        "birthday": "1995-03-24",
-        "exam_time": "15:30:00",
-        "image": "SU1BR0UuUENH",
-        "score": 82.5,
-        "highlight_article": [
-            "contributions <red>to</red> deep learning in artificial intelligence"
-        ],
-        "id": 234050606505930753,
-        "updated_at": "2025-01-05T20:33:33.041235+08:00",
-        "_elastic": {
-            "_score": 1.8139606,
-            "_index": "es_student",
-            "_id": "zqR0NpQBT1ym-Bx53K4b"
-        }
+    "image": "SU1BR0UuUENH",
+    "age": 39,
+    "created_at": "2025-01-05T21:22:35.821669+08:00",
+    "gender": 2,
+    "identify": 2024061211,
+    "score": 93.8,
+    "name": "metcalfe",
+    "updated_at": "2025-01-05T21:22:35.821654+08:00",
+    "birthday": "1976-08-27",
+    "id": 234062949419855873,
+    "exam_time": "15:30:00",
+    "highlight_article": [
+      "<red>contribution</red> <red>to</red> leading the public into the era of hyper-connectivity"
+    ],
+    "highlight_exam_time": [
+      "<yellow>15</yellow>:30:00"
+    ]
+  },
+  {
+    "_elastic": {
+      "_score": 1.8139606,
+      "_index": "es_student",
+      "_id": "zqR0NpQBT1ym-Bx53K4b"
     },
-    {
-        "identify": 2024070733,
-        "image": "SU1BR0UuUENH",
-        "_elastic": {
-            "_score": 1.6168463,
-            "_index": "es_student",
-            "_id": "234062949419855874"
-        },
-        "age": 36,
-        "birthday": "1976-08-27",
-        "updated_at": "2025-01-05T21:22:35.821675+08:00",
-        "highlight_article": [
-            "develop automated methods <red>to</red> detect design errors in computer hardware and software"
-        ],
-        "article": "develop automated methods to detect design errors in computer hardware and software",
-        "created_at": "2025-01-05T21:22:35.82168+08:00",
-        "exam_time": "15:30:00",
-        "gender": 2,
-        "id": 234062949419855874,
-        "name": "emerson",
-        "score": 79.9,
-        "highlight_exam_time": [
-            "<yellow>15</yellow>:30:00"
-        ]
-    }
+    "age": 17,
+    "score": 82.5,
+    "image": "SU1BR0UuUENH",
+    "name": "jerry",
+    "birthday": "1995-03-24",
+    "id": 234050606505930753,
+    "identify": 2024092316,
+    "created_at": "2025-01-05T20:33:33.04126+08:00",
+    "updated_at": "2025-01-05T20:33:33.041235+08:00",
+    "gender": 1,
+    "exam_time": "15:30:00",
+    "highlight_article": [
+      "contributions <red>to</red> deep learning in artificial intelligence"
+    ],
+    "highlight_exam_time": [
+      "<yellow>15</yellow>:30:00"
+    ]
+  },
+  {
+    "_elastic": {
+      "_score": 1.6168463,
+      "_index": "es_student",
+      "_id": "234062949419855874"
+    },
+    "age": 36,
+    "birthday": "1976-08-27",
+    "created_at": "2025-01-05T21:22:35.82168+08:00",
+    "identify": 2024070733,
+    "name": "emerson",
+    "score": 79.9,
+    "gender": 2,
+    "id": 234062949419855874,
+    "updated_at": "2025-01-05T21:22:35.821675+08:00",
+    "image": "SU1BR0UuUENH",
+    "exam_time": "15:30:00",
+    "highlight_article": [
+      "develop automated methods <red>to</red> detect design errors in computer hardware and software"
+    ],
+    "highlight_exam_time": [
+      "<yellow>15</yellow>:30:00"
+    ]
+  }
 ]
 ```
 
 # 数据维护
 ## INSERT 语句
+Insert 函数可以插入各种类型的数据，比如 struct、map、struct数组、map数组。
+
 ### 插入 map 数据
-我们可以通过 `InsertMap` 传入 map 数据，插入单条数据。
-- 示例 1，MySQL 插入新数据，返回`horm.AffectedInfo`，如果不关心返回，可以不传 result：
+我们可以通过 `Insert` 传入 map 数据，插入单条数据。
+- 示例 1，MySQL 插入新数据，返回`horm.ModRet`，如果不关心返回，可以不传 modRet：
 ```go
-func Test(ctx context.Context) {
-	data := horm.SetMap{
-		"class_id": 1,
-		"name":     "smallhowcao",
-		"sex":      "male",
-		"age":      33,
-		"status":   1,
+func insertMap(ctx context.Context) {
+	data := horm.Map{
+		"id":         235842198988402689,
+		"identify":   2024061211,
+		"name":       "metcalfe",
+		"gender":     2,
+		"age":        39,
+		"score":      93.8,
+		"article":    "contribution to leading the public into the era of hyper-connectivity",
+		"exam_time":  "15:30:00",
+		"image":      "SU1BR0UuUENH",
+		"birthday":   "1976-08-27",
+		"created_at": time.Now(),
+		"updated_at": time.Now(),
 	}
 
-	result := horm.AffectedInfo{}
-	err := horm.NewQuery("student").InsertMap(data).Exec(ctx, &result)
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("student").Insert(data).Exec(ctx, &modRet)
 
-	if horm.IsError(err) {
-		fmt.Printf("insert student error: %v", err)
-		return
-	}
 	...
 }
 ```
-- 示例2，Elastic 插入新数据，返回 `horm.EsResult`，如果不关心返回，可以不传 result：
+
+返回数据如下：
+```json
+{
+    "id": "235842198988402689",
+    "rows_affected": 1
+}
+```
+
+在 horm，我们用 proto.ModRet 来接收单条记录的插入结果，该结构体如下：
 ```go
-func Test(ctx context.Context) {
-	data := horm.SetMap{
-		"class_id": 1,
-		"name":     "smallhowcao",
-		"sex":      "male",
-		"age":      33,
-		"status":   1,
+// ModRet 新增/更新返回信息
+type ModRet struct {
+	ID          ID                     `orm:"id,omitempty" json:"id,omitempty"`                       // id 主键，可能是 mysql 的最后自增id，last_insert_id 或 elastic 的 _id 等，类型可能是 int64、string
+	RowAffected int64                  `orm:"rows_affected,omitempty" json:"rows_affected,omitempty"` // 影响行数
+	Version     int64                  `orm:"version,omitempty" json:"version,omitempty"`             // 数据版本
+	Status      int                    `orm:"status,omitempty" json:"status,omitempty"`               // 返回状态码
+	Reason      string                 `orm:"reason,omitempty" json:"reason,omitempty"`               // mod 失败原因
+	Extras      map[string]interface{} `orm:"extras,omitempty" json:"extras,omitempty"`               // 更多详细信息
+}
+
+type ID string
+
+func (id ID) String() string
+func (id ID) Float64() float64
+func (id ID) Int() int
+func (id ID) Int64() int64
+func (id ID) Uint()
+func (id ID) Uint64()
+```
+
+- 示例2，Elastic 通过 map 插入单条记录：
+```go
+func insertMapToElastic(ctx context.Context) {
+	data := horm.Map{
+		"_id":        66666, // Elastic 主键
+		"id":         66666,
+		"identify":   2024061211,
+		"name":       "metcalfe",
+		"gender":     2,
+		"age":        39,
+		"score":      93.8,
+		"article":    "contribution to leading the public into the era of hyper-connectivity",
+		"exam_time":  "15:30:00",
+		"image":      "SU1BR0UuUENH",
+		"birthday":   "1976-08-27",
+		"created_at": time.Now(),
+		"updated_at": time.Now(),
 	}
 
-	result := horm.EsResult{}
-	err := horm.NewQuery("es_student").InsertMap(data).Exec(ctx, &result)
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").Insert(data).Exec(ctx, &modRet)
+
 	...
 }
 ```
@@ -2992,85 +3032,63 @@ func Test(ctx context.Context) {
     "rows_affected":1
 }
 ```
+
 ### 插入 struct 数据
-`InsertStruct`函数用于插入单条数据。
+`Insert` 函数传参还可以是 struct 结构体，详细的结构体及`orm`标签的解释可以参考章节 [结构体标签](#结构体标签)。
 
-如下代码， 我们在 struct 结构体里面加入了自己的标签 orm，用于将字段与数据库表字段对应上，如果没有该标签，字段将会是struct的field name，如果在标签第3个分割位加上加上 omitinsertempty 可以让插入数据的时候忽略该字段，例如 Auto Increment 的字段就很需要这个，关于orm标签详情请看[结构体标签](#结构体标签)
-- 示例 1，MySQL 插入新数据，返回 `horm.AffectedInfo` ，如果不关心返回，可以不传 result：
 ```go
-type Userinfo struct {
-	//omitempty = omitinsertempty + omitreplaceempty + omitupdateempty 表示插入、替换、更新都忽略零值，如 Auto Increment 需要
-	Id         int         `orm:"id,int,omitempty"`
-	Status     bool        `orm:"status,int8,omitinsertempty"` //omitinsertempty 插入忽略零值
-	Height     int         `orm:"height,int,omitreplaceempty"`    //omitreplaceempty 替换忽略零值
-	Score      float64     `orm:"score,double,omitupdateempty"`   //omitupdateempty 更新忽略零值
-	Name       string      `orm:"name,varchar"`
-	Sex        string      `orm:"sex,varchar"`
-	Work       string      `orm:"work,varchar"`
-	Buyed      string      `orm:"buyed,varchar"`
-	Age        int         `orm:"age,int"`
-	Bid        int         `orm:"bid,int"`
-	Addtime    time.Time   `orm:"addtime,timestamp,oncreatetime"`    //oncreatetime 插入时自动初始化为当前时间
-	Updatetime time.Time   `orm:"updatetime,timestamp,onupdatetime"` //onupdate 自动修改为当前时间
-}
-
-func Test(ctx context.Context) {
-	data := Userinfo{
-		Height: 170,
-		Status: true,
-		Name:   "smallhowcao",
-		Sex:    "male",
-		Age:    33,
-		Bid:    1004,
-	}
-
-	result := horm.AffectedInfo{}
-	err := horm.NewQuery("student").InsertStruct(&data).Exec(ctx, &result)
-	...
-}
-```
-返回结果：
-```json
-{
-    "last_insert_id":1324,
-    "rows_affected":1
+type Student struct {
+	Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`
+	Identify  int64      `orm:"identify,int64" json:"identify"`                      //学生编号
+	Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`           //1-male 2-female
+	Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                //年龄
+	Name      string     `orm:"name,string,omitupdateempty" json:"name"`             //名称
+	Score     float64    `orm:"score,double,omitempty" json:"score"`                 //分数
+	Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                  //image
+	Article   string     `orm:"article,string,omitempty" json:"article"`             //publish article
+	ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`         //考试时间
+	Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` //出生日期
+	CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`      //创建时间
+	UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //修改时间
 }
 ```
 
-- 示例2，Elastic 插入新数据，返回 `horm.EsResult`，如果不关心返回，可以不传 result：
+- 示例 1：
 ```go
-func Test(ctx context.Context) {
-	data := Userinfo{
-		Height: 170,
-		Status: true,
-		Name:   "smallhowcao",
-		Sex:    "male",
-		Age:    33,
-		Bid:    1004,
+func insertStruct(ctx context.Context) {
+	birthday, _ := time.Parse("2006-01-02", "1976-08-27")
+
+	data := Student{
+		Identify: 2024061211,
+		Gender:   2,
+		Age:      39,
+		Name:     "metcalfe",
+		Score:    93.8,
+		Image:    []byte("IMAGE.PCG"),
+		Article:  "contribution to leading the public into the era of hyper-connectivity",
+		ExamTime: "15:30:00",
+		Birthday: types.Time(birthday),
 	}
 
-	result := horm.EsResult{}
-	err := horm.NewQuery("es_student").InsertStruct(&data).Exec(ctx, &result)
+	modRets := make([]*proto.ModRet, 0)
+	_, err := horm.NewQuery("student").Insert(&data).Exec(ctx, &modRets)
 	
-	if horm.IsError(err) {
-		fmt.Printf("insert student error: %v", err)
-		return
-	}
 	...
 }
 ```
+
 返回结果：
 ```json
 {
-    "_id":"v03bpIEBL4QnOSO-YOvH",
-    "version":1,
-    "rows_affected":1
+  "id": "235900923765862401",
+  "rows_affected": 1
 }
 ```
+
 
 ### 批量插入数据
-`InsertStructs`函数用于插入多条数据。
-- 示例 1，MySQL 插入新数据，返回 `horm.AffectedInfo`，如果不关心返回，可以不传 result：
+`Insert`函数用于插入多条数据。
+- 示例 1，MySQL 插入新数据，返回 `horm.ModRet`，如果不关心返回，可以不传 result：
 ```go
 func Test(ctx context.Context) {
 	datas := []*Student{
@@ -3088,8 +3106,8 @@ func Test(ctx context.Context) {
 		},
 	}
 
-	result := horm.AffectedInfo{}
-	err := horm.NewQuery("student").InsertStructs(&datas).Exec(ctx, &result)
+	result := horm.ModRet{}
+	err := horm.NewQuery("student").Insert(&datas).Exec(ctx, &result)
 	...
 }
 ```
@@ -3101,7 +3119,7 @@ func Test(ctx context.Context) {
 }
 ```
 
-- 示例2，Elastic 插入新数据，返回 `[]*horm.EsResult`，如果不关心返回，可以不传 result：
+- 示例2，Elastic 插入新数据，返回 `[]*horm.ModRet`，如果不关心返回，可以不传 result：
 ```go
 func Test(ctx context.Context) {
 	datas := []*Student{
@@ -3119,8 +3137,8 @@ func Test(ctx context.Context) {
 		},
 	}
 
-	result := make([]*horm.EsResult, 0)
-	err := horm.NewQuery("es_student").InsertStructs(&datas).Exec(ctx, &result)
+	result := make([]*horm.ModRet, 0)
+	err := horm.NewQuery("es_student").Insert(&datas).Exec(ctx, &result)
 
 	if horm.IsError(err) {
 		fmt.Printf("batch insert student error: %v", err)
@@ -3157,7 +3175,7 @@ func Test(ctx context.Context) {
 ]
 ```
 
-- 示例3，Elastic 根据 `_id` 插入新数据，返回 `[]*horm.EsResult`，如果不关心返回，可以不传 result：
+- 示例3，Elastic 根据 `_id` 插入新数据，返回 `[]*horm.ModRet`，如果不关心返回，可以不传 result：
 ```go
 func Test(ctx context.Context) {
 	datas := []*Student{
@@ -3179,8 +3197,8 @@ func Test(ctx context.Context) {
 
 	ids := []int{2233455, 2233456}
 
-	result := make([]*horm.EsResult, 0)
-	err := horm.NewQuery("es_student").InsertStructs(&datas).Eq("_id", ids).Exec(ctx, &result)
+	result := make([]*horm.ModRet, 0)
+	err := horm.NewQuery("es_student").Insert(&datas).Eq("_id", ids).Exec(ctx, &result)
 	
 	if horm.IsError(err) {
 		fmt.Printf("batch insert student error: %v", err)
@@ -3233,7 +3251,7 @@ func Test(ctx context.Context) {
 		"age":      21,
 	}
 
-	result := horm.AffectedInfo{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("student").UpdateMap(data).Eq("userid", 9713).Exec(ctx, &result)
 	...
 }
@@ -3257,7 +3275,7 @@ func Test(ctx context.Context) {
 
 	where := horm.Where{"userid": 2233456}
 	
-	result := horm.AffectedInfo{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("student").UpdateMap(data, where).Exec(ctx, &result)
 	...
 }
@@ -3274,7 +3292,7 @@ func Test(ctx context.Context) {
 
 	where := horm.Where{"userid": 2233456}
 	
-	result := horm.EsResult{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("es_student").UpdateMap(data, where).Exec(ctx, &result)
 	...
 }
@@ -3317,7 +3335,7 @@ func Test(ctx context.Context) {
 		"age":      22,
 	}
 
-	result := horm.EsResult{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("es_student").UpdateMap(data).Eq("_id", 2233456).Exec(ctx, &result)
 	...
 }
@@ -3355,7 +3373,7 @@ func Test(ctx context.Context) {
 		Name:    "smallhow",
 	}
 
-	result := horm.AffectedInfo{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("student").UpdateStruct(data).Eq("userid", 6348).Exec(ctx, &result)
 	...
 }
@@ -3369,7 +3387,7 @@ delete 比较简单，就只需要加上 where 条件即可。
 func Test(ctx context.Context) {
 	where := horm.Where{"age": 33}
 
-	result := horm.AffectedInfo{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("student").Delete(where).Exec(ctx, &result)
 	...
 }
@@ -3387,7 +3405,7 @@ func Test(ctx context.Context) {
 func Test(ctx context.Context) {
 	where := horm.Where{"age": 22}
 
-	result := horm.EsResult{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("es_student").Delete(where).Exec(ctx, &result)
 	...
 }
@@ -3402,7 +3420,7 @@ func Test(ctx context.Context) {
 - 示例3（elastic by _id）
 ```go
 func Test(ctx context.Context) {
-	result := horm.EsResult{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("es_student").Delete().Eq("_id", "w001qIEBL4QnOSO-k-s5").Exec(ctx, &result)
 	...
 }
@@ -3430,7 +3448,7 @@ func Test(ctx context.Context) {
 		"age":      22,
 	}
 
-	result := horm.EsResult{}
+	result := horm.ModRet{}
 	err := horm.NewQuery("es_student").UpdateMap(data).Eq("_id", 2233456).
 		Refresh().        // 更新数据立即刷新
 		Exec(ctx, &result)
