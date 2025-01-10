@@ -149,7 +149,7 @@ type Student struct {
 }
 ```
 
-`orm` 字段类型包含如下类型，更多详情参考章节 `基础数据类型`：
+`orm` 字段类型包含如下类型，更多详情参考章节 [基础数据类型](#基础数据类型)：
 ```go
 var OrmType = map[string]Type{
 	"time":   TypeTime,
@@ -172,7 +172,7 @@ var OrmType = map[string]Type{
 }
 ```
 
-`orm` 标签目前支持的字段属性如下：
+`orm` 标签目前支持的属性如下：
 - `omitinsertempty`: INSERT 时忽略零值，在插入数据的时候，如果字段为零值，这该字段被忽略插入，让其取数据库表默认值。
 - `omitreplaceempty`: REPLACE 时忽略零值，在替换数据的时候，如果字段为零值，这该字段被忽略替换。
 - `omitupdateempty`: UPDATE 时忽略零值，在更新数据的时候，如果字段为零值，这该字段被忽略更新，保持原值。
