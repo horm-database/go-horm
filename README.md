@@ -1302,7 +1302,7 @@ import (
     "github.com/horm-database/common/types"
 )
 
-func isAllSuccess(ctx context.Context) {
+func queryIsAllSuccess(ctx context.Context) {
 	birthday, _ := time.Parse("2006-01-02", "1967-08-27")
 
 	datas := []*Student{
