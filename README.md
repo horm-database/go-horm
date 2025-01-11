@@ -3086,7 +3086,8 @@ func insertMapToElastic(ctx context.Context) {
 ```
 
 ### 批量插入数据
-`Insert` 函数接收的参数为map数组，或者 struct 数组的时候，就会执行批量插入，返回 `proto.ModRet`。
+`Insert` 函数接收的参数为map数组，或者 struct 数组的时候，就会执行批量插入，如果是插入 MySQL 等，则返回 `proto.ModRet`， 包含批量插入
+最后一条记录的id和影响行数rows_affected，插入 Elastic 由于支持部分成功，返回的就是 `[]*proto.ModRet` 来接收每一条数据的插入结果。
 - 示例 1：
 ```go
 func insertMapArray(ctx context.Context) {
@@ -3135,7 +3136,7 @@ func insertMapArray(ctx context.Context) {
 }
 ```
 
-- Elastic 批量插入的时候，支持部分成功，所以返回 `[]*proto.ModRet` 来接收每一条数据的插入结果，可用 horm.IsAllSuccess 函数，具体案例可以参考章节 [全部成功](#全部成功)
+- Elastic 批量插入的具体案例可以参考章节 [全部成功](#全部成功)
 - Elastic 插入数据的时候指定主键，可以参考章节 [Elastic主键](#Elastic主键)
 
 
