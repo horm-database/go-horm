@@ -86,20 +86,19 @@ import (
 )
 
 type Student struct {
-    Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`
-    Identify  int64      `orm:"identify,int64" json:"identify"`                      //学生编号
-    Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`           //1-male 2-female
-    Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                //年龄
-    Name      string     `orm:"name,string,omitupdateempty" json:"name"`             //名称
-    Score     float64    `orm:"score,double,omitempty" json:"score"`                 //分数
-    Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                  //image
-    Article   string     `orm:"article,string,omitempty" json:"article"`             //publish article
-    ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`         //考试时间
-    Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` //出生日期
-    CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`      //创建时间
-    UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //修改时间
+	Id        uint64     `orm:"id,uint64,onuniqueid,omitempty" json:"id"`
+	Identify  int64      `orm:"identify,int64,omitempty" json:"identify"`                 //学生编号
+	Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`                //1-male 2-female
+	Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                     //年龄
+	Name      string     `orm:"name,string,omitupdateempty" json:"name"`                  //名称
+	Score     float64    `orm:"score,double,omitempty" json:"score"`                      //分数
+	Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                       //image
+	Article   string     `orm:"article,string,omitempty" json:"article"`                  //publish article
+	ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`              //考试时间
+	Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"`      //出生日期
+	CreatedAt time.Time  `orm:"created_at,time,oncreatetime,omitempty" json:"created_at"` //创建时间
+    UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`           //修改时间
 }
-
 ```
 
 ```go
@@ -131,21 +130,20 @@ type ScoreRankReward struct {
 ## 结构体标签
 支持通过 golang 结构体标签来描述数据库表字段，以及如何将结构体编码为请求，如下 Student 结构体，标签以 `orm` 开头，第一个参数为表字段名，
 第二个参数为 orm 类型，其他则是属性，horm 会将结构体的 `orm` 标签解析后，将字段、类型、属性信息缓存到内存，用于编解码结构体：
-```golang
-//示例结构体
+```go
 type Student struct {
-  Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`        
-  Identify  int64      `orm:"identify,int64" json:"identify"`                     
-  Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`   
-  Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`     
-  Name      string     `orm:"name,string,omitupdateempty" json:"name"`    
-  Score     float64    `orm:"score,double,omitempty" json:"score"`            
-  Image     []byte     `orm:"image,bytes,omitempty" json:"image"`               
-  Article   string     `orm:"article,string,omitempty" json:"article"`     
-  ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`      
-  Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` 
-  CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`   
-  UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"` 
+	Id        uint64     `orm:"id,uint64,onuniqueid,omitempty" json:"id"`
+	Identify  int64      `orm:"identify,int64,omitempty" json:"identify"`                 //学生编号
+	Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`                //1-male 2-female
+	Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                     //年龄
+	Name      string     `orm:"name,string,omitupdateempty" json:"name"`                  //名称
+	Score     float64    `orm:"score,double,omitempty" json:"score"`                      //分数
+	Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                       //image
+	Article   string     `orm:"article,string,omitempty" json:"article"`                  //publish article
+	ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`              //考试时间
+	Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"`      //出生日期
+	CreatedAt time.Time  `orm:"created_at,time,oncreatetime,omitempty" json:"created_at"` //创建时间
+	UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`           //修改时间
 }
 ```
 
@@ -177,10 +175,10 @@ var OrmType = map[string]Type{
 - `omitreplaceempty`: REPLACE 时忽略零值，在替换数据的时候，如果字段为零值，这该字段被忽略替换。
 - `omitupdateempty`: UPDATE 时忽略零值，在更新数据的时候，如果字段为零值，这该字段被忽略更新，保持原值。
 - `omitempty`: 数据新增、替换、修改时都忽略零值，= omitinsertempty + omitreplaceempty + omitupdateempty 。
-- `oncreatetime`: 在 INSERT/REPLACE 数据时，如果该字段为零值，初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型。
-- `onupdatetime`: 在 INSERT/REPLACE/UPDATE 数据时，如果该字段为零值，初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型。
+- `oncreatetime`: 在 INSERT/REPLACE 数据时，如果该字段为零值，初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型，如果设置了该属性，则在插入数据时 omit empty 属性失效。
+- `onupdatetime`: 在 INSERT/REPLACE/UPDATE 数据时，如果该字段为零值，初始化为当前时间，具体格式根据 Type 决定，如果是数字类型包括 int、int32、int64 等，则是时间戳，否则就是 time.Time 类型，则在插入/修改数据时 omit empty 属性失效。
 - `time_fmt`: 当字段底层类型为 time.Time 时，格式化时间，仅针对请求格式化，返回数据的解析在 codec 内。例如上面的 birthday 字段，time_fmt 会使得请求的时候，会将 birthday 转化为 `2006-01-02` 格式，在服务端返回字符串是 "2006-01-02" 格式时，只有类型 types.Time 才能正确接收结果。
-- `onuniqueid`: 新增数据时候，如果字段为零值，而且类型为 uint64，则自动生成唯一 ID，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突，当然，你也可以采用数据库的自增id作为主键，这时候，最好加上 omitempty。
+- `onuniqueid`: 新增数据时候，如果字段为零值，而且类型为 uint64，则自动生成唯一 ID，如果设置了该属性，则在插入数据时 omit empty 属性失效，记得务必在 orm.yaml 配置里面为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突，当然，你也可以采用数据库的自增id作为主键，这时候，最好加上 omitempty。
 - `es_id`: 当出现该属性，表示本字段的值作为 es 主键，那么在插入数据的时候，我们会加入 `_id` 字段并赋值为该字段值。数据统一存储系统会将 `_id` 提取并作为该数据的主键。
 
 
@@ -1575,19 +1573,20 @@ Elastic 默认在插入数据的时候会自动生成主键值，他的主键为
 - orm 标签加上 `es_id` 属性会指定字段值作为 es 的主键，如下 `id` 字段：
 ```go
 type Student struct {
-  Id        uint64     `orm:"id,uint64,onuniqueid,es_id" json:"id"`
-  Identify  int64      `orm:"identify,int64" json:"identify"`                      //学生编号
-  Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`           //1-male 2-female
-  Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                //年龄
-  Name      string     `orm:"name,string,omitupdateempty" json:"name"`             //名称
-  Score     float64    `orm:"score,double,omitempty" json:"score"`                 //分数
-  Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                  //image
-  Article   string     `orm:"article,string,omitempty" json:"article"`             //publish article
-  ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`         //考试时间
-  Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` //出生日期
-  CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`      //创建时间
-  UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //修改时间
+	Id        uint64     `orm:"id,uint64,onuniqueid,es_id,omitempty" json:"id"`
+	Identify  int64      `orm:"identify,int64,omitempty" json:"identify"`                 //学生编号
+	Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`                //1-male 2-female
+	Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                     //年龄
+	Name      string     `orm:"name,string,omitupdateempty" json:"name"`                  //名称
+	Score     float64    `orm:"score,double,omitempty" json:"score"`                      //分数
+	Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                       //image
+	Article   string     `orm:"article,string,omitempty" json:"article"`                  //publish article
+	ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`              //考试时间
+	Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"`      //出生日期
+	CreatedAt time.Time  `orm:"created_at,time,oncreatetime,omitempty" json:"created_at"` //创建时间
+	UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`           //修改时间
 }
+
 
 func insertEsByID(ctx context.Context) {
 	birthday, _ := time.Parse("2006-01-02", "1976-08-27")
@@ -2943,22 +2942,21 @@ func queryHighlight(ctx context.Context) {
 Insert 函数可以插入各种类型的数据，比如 struct、map、struct数组、map数组。
 
 ### 插入 struct 数据
-`Insert` 函数传参可以是 struct 结构体，详细的结构体及`orm`标签的解释可以参考章节 [结构体标签](#结构体标签)，
-返回 `proto.ModRet`，如果不关心返回，可以不传：
+`Insert` 函数传参可以是 struct 结构体，详细的结构体及`orm`标签的解释可以参考章节 [结构体标签](#结构体标签)， 返回 `proto.ModRet`，如果不关心返回，可以不传：
 ```go
 type Student struct {
-	Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`
-	Identify  int64      `orm:"identify,int64" json:"identify"`                      //学生编号
-	Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`           //1-male 2-female
-	Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                //年龄
-	Name      string     `orm:"name,string,omitupdateempty" json:"name"`             //名称
-	Score     float64    `orm:"score,double,omitempty" json:"score"`                 //分数
-	Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                  //image
-	Article   string     `orm:"article,string,omitempty" json:"article"`             //publish article
-	ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`         //考试时间
-	Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"` //出生日期
-	CreatedAt time.Time  `orm:"created_at,time,oncreatetime" json:"created_at"`      //创建时间
-	UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`      //修改时间
+	Id        uint64     `orm:"id,uint64,onuniqueid,omitempty" json:"id"`
+	Identify  int64      `orm:"identify,int64,omitempty" json:"identify"`                 //学生编号
+	Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`                //1-male 2-female
+	Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                     //年龄
+	Name      string     `orm:"name,string,omitupdateempty" json:"name"`                  //名称
+	Score     float64    `orm:"score,double,omitempty" json:"score"`                      //分数
+	Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                       //image
+	Article   string     `orm:"article,string,omitempty" json:"article"`                  //publish article
+	ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`              //考试时间
+	Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"`      //出生日期
+	CreatedAt time.Time  `orm:"created_at,time,oncreatetime,omitempty" json:"created_at"` //创建时间
+	UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`           //修改时间
 }
 ```
 
@@ -3138,6 +3136,7 @@ func insertMapArray(ctx context.Context) {
 
 - Elastic 批量插入的具体案例可以参考章节 [全部成功](#全部成功)
 - Elastic 插入数据的时候指定主键，可以参考章节 [Elastic主键](#Elastic主键)
+- 除了 map 数组，批量插入同样也支持 struct 数组。
 
 
 ## REPLACE 语句
@@ -3147,145 +3146,193 @@ replace 和 insert 函数类似，只不过是把 sql 关键词 insert 替换为
 `注意：elastic search 不支持 replace`
 
 ## UPDATE 语句
+Update 函数可以更新各种类型的数据，比如 map、struct。
 ### 更新 map 数据
-- 示例1（主键更新）：
+- 示例1：
 ```go
-func Test(ctx context.Context) {
-	data := horm.SetMap{
-		"class_id": 2,
-		"name":     "jerry",
-		"sex":      "male",
-		"age":      21,
+func updateMap(ctx context.Context) {
+	data := horm.Map{
+		"exam_time":  "09:00:00",
+		"age":        49,
+		"updated_at": time.Now(),
 	}
 
-	result := proto.ModRet{}
-	err := horm.NewQuery("student").UpdateMap(data).Eq("userid", 9713).Exec(ctx, &result)
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("student").
+		Update(data).Eq("id", 235842198988452699).Exec(ctx, &modRet)
+
 	...
 }
 ```
 返回结果：
 ```json
 {
-    "last_insert_id":0,
-    "rows_affected":1
+  "rows_affected": 2
 }
 ```
-- 示例2（where 条件更新）：
+
+- 示例2：
 ```go
-func Test(ctx context.Context) {
-	data := horm.SetMap{
-		"class_id": 2,
-		"name":     "jerry",
-		"sex":      "male",
-		"age":      21,
+func updateMapByWhere(ctx context.Context) {
+	data := horm.Map{
+		"exam_time": "16:00:00",
+		"updated_at": time.Now(),
 	}
 
-	where := horm.Where{"userid": 2233456}
+	where := horm.Where{"age >": 40}
+
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("student").Update(data, where).Exec(ctx, &modRet)
 	
-	result := proto.ModRet{}
-	err := horm.NewQuery("student").UpdateMap(data, where).Exec(ctx, &result)
 	...
 }
 ```
-- 示例3（elastic by query 更新）：
+
+- 示例3（Elastic update by _id）：
 ```go
-func Test(ctx context.Context) {
-	data := horm.SetMap{
-		"class_id": 2,
-		"name":     "jerry",
-		"sex":      "male",
-		"age":      21,
+func updateMapElasticByID(ctx context.Context) {
+	data := horm.Map{
+		"exam_time":  "15:45:00",
+		"updated_at": time.Now(),
 	}
 
-	where := horm.Where{"userid": 2233456}
-	
-	result := proto.ModRet{}
-	err := horm.NewQuery("es_student").UpdateMap(data, where).Exec(ctx, &result)
+	where := horm.Where{"_id": 234062949419855873}
+
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").Update(data, where).Exec(ctx, &modRet)
+
+	...
+}
+
+```
+生成的请求：
+```eslint
+{
+    "script": {
+        "params": {
+            "exam_time": "15:45:00",
+            "updated_at": "2025-01-11T22:24:29.168736+08:00"
+        },
+        "source": "ctx._source.exam_time=params.exam_time;ctx._source.updated_at=params.updated_at"
+    }
+}
+```
+
+返回结果：
+```json
+{
+  "id": "234062949419855873",
+  "rows_affected": 1,
+  "version": 2
+}
+```
+
+- 示例4（Elastic update by query）：
+```go
+func updateMapElastic(ctx context.Context) {
+	data := horm.Map{
+		"exam_time":  "16:00:00",
+		"updated_at": time.Now(),
+	}
+
+	where := horm.Where{"age >": 60}
+
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").Update(data, where).Exec(ctx, &modRet)
+
 	...
 }
 ```
 生成的请求：
-```json
+```eslint
+POST /es_student/_update_by_query?refresh=false
 {
-    "query":{
-        "bool":{
-            "filter":{
-                "terms":{
-                    "age":[
-                        19
-                    ]
-                }
-            }
+  "query": {
+    "bool": {
+      "filter": {
+        "range": {
+          "age": {
+            "from": 60,
+            "include_lower": false,
+            "include_upper": true,
+            "to": null
+          }
         }
+      }
+    }
+  },
+  "script": {
+    "params": {
+      "exam_time": "16:00:00",
+      "updated_at": "2025-01-11T22:17:25.282884+08:00"
     },
-    "script":{
-        "source":"ctx._source.age=21;ctx._source.class_id=2;ctx._source.name='jerry';ctx._source.sex='male'"
-    }
+    "source": "ctx._source.exam_time=params.exam_time;ctx._source.updated_at=params.updated_at"
+  }
 }
 ```
 返回结果：
 ```json
 {
-    "_id":"",
-    "version":0,
-    "rows_affected":1
-}
-```
-
-- 示例3（elastic by _id 更新）：
-```go
-func Test(ctx context.Context) {
-	data := horm.SetMap{
-		"class_id": 2,
-		"name":     "jerry",
-		"sex":      "male",
-		"age":      22,
-	}
-
-	result := proto.ModRet{}
-	err := horm.NewQuery("es_student").UpdateMap(data).Eq("_id", 2233456).Exec(ctx, &result)
-	...
-}
-```
-生成的请求：
-```json
-/student/_update/2233456?refresh=false
-{
-    "doc":{
-        "age":21,
-        "class_id":2,
-        "name":"jerry",
-        "sex":"male"
-    }
-}
-```
-
-返回结果：
-```json
-{
-    "_id":"2233456",
-    "version":5,
-    "rows_affected":1
+  "rows_affected": 2
 }
 ```
 
 ### 更新 struct 数据
-omitupdateempty、omitempty、onupdatetime 标签对本函数生效。
+omitupdateempty、omitempty、onupdatetime 标签会对 struct 的 update 操作作用。
 ```go
-func Test(ctx context.Context) {
+type Student struct {
+	Id        uint64     `orm:"id,uint64,onuniqueid,omitempty" json:"id"`
+	Identify  int64      `orm:"identify,int64,omitempty" json:"identify"`                 //学生编号
+	Gender    int8       `orm:"gender,int8,omitinsertempty" json:"gender"`                //1-male 2-female
+	Age       uint       `orm:"age,uint,omitreplaceempty" json:"age"`                     //年龄
+	Name      string     `orm:"name,string,omitupdateempty" json:"name"`                  //名称
+	Score     float64    `orm:"score,double,omitempty" json:"score"`                      //分数
+	Image     []byte     `orm:"image,bytes,omitempty" json:"image"`                       //image
+	Article   string     `orm:"article,string,omitempty" json:"article"`                  //publish article
+	ExamTime  string     `orm:"exam_time,string,omitempty" json:"exam_time"`              //考试时间
+	Birthday  types.Time `orm:"birthday,time,time_fmt='2006-01-02'" json:"birthday"`      //出生日期
+	CreatedAt time.Time  `orm:"created_at,time,oncreatetime,omitempty" json:"created_at"` //创建时间
+	UpdatedAt time.Time  `orm:"updated_at,time,onupdatetime" json:"updated_at"`           //修改时间
+}
+
+func updateStruct(ctx context.Context) {
 	data := Student{
-		ClassId: 1,
-		Sex:     "male",
-		Age:     31,
-		Name:    "smallhow",
+		Gender:   2,
+		Age:      39,
+		Score:    93.8,
+		Article:  "contribution to leading the public into the era of hyper-connectivity",
+		ExamTime: "15:30:00",
 	}
 
-	result := proto.ModRet{}
-	err := horm.NewQuery("student").UpdateStruct(data).Eq("userid", 6348).Exec(ctx, &result)
-	...
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("student").Update(&data).Eq("id", 235842198988432689).Exec(ctx, &modRet)
+	fmt.Println(err)
 }
 ```
-其他示例与 更新 map 类似，就是将 UpdateStruct 替换为 UpdateMap 。
+
+从下面请求我们可以看出id、identify、image、created_at有 omitempty 属性、name有 omitupdateempty 属性，所以在更新的时候该字段如果
+未赋值，则会被忽略，而 birthday 没有 omitempty、omitupdateempty，那么在更新的时候，不会被忽略，会被置为零值，这可能会导致与 预期不一致的
+结果，updated_at 虽然未被赋值，但是由于他有 onupdatetime 属性，所以在更新的时候，都会被horm 赋值为当前时间：
+```json
+{
+  "name": "student",
+  "op": "update",
+  "where": {
+    "id": 235842198988432689
+  },
+  "data": {
+    "gender": 2,
+    "age": 39,
+    "score": 93.8,
+    "article": "contribution to leading the public into the era of hyper-connectivity",
+    "exam_time": "15:30:00",
+    "updated_at": "2025-01-11T23:33:14.430691+08:00",
+    "birthday": "0001-01-01"
+  }
+}
+```
+
+其他示例和更新 map 类似，我们主要是关注 omitupdateempty、omitempty、onupdatetime 标签属性对更新的影响。
 
 ## DELETE 数据
 delete 比较简单，就只需要加上 where 条件即可。
@@ -3320,7 +3367,7 @@ func Test(ctx context.Context) {
 返回结果：
 ```json
 {
-    "rows_affected":5,
+    "rows_affected":5
 }
 ```
 
@@ -3348,7 +3395,7 @@ func Test(ctx context.Context) {
 通过 `Refresh(true)` 函数可以使 elastic 在更新数据之后立即刷新，当然，这个会导致 elastic search 的压力增大。
 ```go
 func Test(ctx context.Context) {
-	data := horm.SetMap{
+	data := horm.Map{
 		"class_id": 2,
 		"name":     "jerry",
 		"sex":      "male",
