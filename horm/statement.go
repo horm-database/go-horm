@@ -331,13 +331,25 @@ func (s *Query) setData(typ codec.EncodeType, data interface{}) *Query {
 	switch v := data.(type) {
 	case Map:
 		return s.setMap(v)
+	case *Map:
+		return s.setMap(*v)
 	case []Map:
 		return s.setMaps(v)
+	case *[]Map:
+		return s.setMaps(*v)
 	case map[string]interface{}:
 		return s.setMap(v)
+	case *map[string]interface{}:
+		return s.setMap(*v)
 	case []map[string]interface{}:
 		mapArr := make([]Map, len(v))
 		for i, val := range v {
+			mapArr[i] = val
+		}
+		return s.setMaps(mapArr)
+	case *[]map[string]interface{}:
+		mapArr := make([]Map, len(*v))
+		for i, val := range *v {
 			mapArr[i] = val
 		}
 		return s.setMaps(mapArr)

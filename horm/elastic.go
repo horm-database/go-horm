@@ -78,9 +78,9 @@ func (s *Query) Routing(routing string) *Query {
 }
 
 // HighLight 返回高亮
-func (s *Query) HighLight(fields []string, preTag, postTag string, replace ...bool) *Query {
+func (s *Query) HighLight(field string, preTag, postTag string, replace ...bool) *Query {
 	highLight := map[string]interface{}{}
-	highLight["fields"] = fields
+	highLight["field"] = field
 	highLight["pre_tag"] = preTag
 	highLight["post_tag"] = postTag
 
@@ -88,8 +88,16 @@ func (s *Query) HighLight(fields []string, preTag, postTag string, replace ...bo
 		highLight["replace"] = true
 	}
 
-	s.SetParam("highlight", highLight)
+	highLights := []map[string]interface{}{}
+	if len(s.Unit.Params) > 0 {
+		v, ok := s.Unit.Params["highlights"].([]map[string]interface{})
+		if ok {
+			highLights = v
+		}
+	}
 
+	highLights = append(highLights, highLight)
+	s.SetParam("highlights", highLights)
 	return s
 }
 

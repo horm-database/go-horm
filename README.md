@@ -411,6 +411,7 @@ type Join struct {
 ## 基础数据类型
 执行单元中的 data、datas、args 等数据参数，可以包含如下一些基础数据类型下：
 ```go
+// github.com/horm-database/common/structs
 package structs
 
 type Type int8
@@ -481,12 +482,11 @@ func queryDataType(ctx context.Context) {
 		ExamTime: "15:30:00",
 		Birthday: types.Time(birthday),
 	}
-
-	var isNil bool
+	
 	var addRet = proto.ModRet{}
 
 	//下面操作有加别名
-	isNil, err := horm.NewQuery("student(add)").Insert(&data).Exec(ctx, &addRet)
+	_, err := horm.NewQuery("student(add)").Insert(&data).Exec(ctx, &addRet)
 
 	...
 }
@@ -1292,8 +1292,9 @@ const (
 ```
 
 ### 全部成功
-这个函数仅用于 Elastic 批量插入新数据时，返回 `[]*proto.ModRet`，可以用 IsAllSuccess 去判断数据是否全部插入成功，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因，这样，我们可以针对失败的记录
-做特殊处理，比如重试。
+这个函数用于在 Elastic 批量插入新数据时，由于 Elastic 支持部分成功，所以返回 `[]*proto.ModRet` 来接收每一条数据的插入结果，
+可以用 IsAllSuccess 去判断数据是否全部插入成功， 我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，
+`reason` 为失败原因，这样，我们可以针对失败的记录 做特殊处理，比如重试。
 ```go
 import (
     ...
@@ -1385,7 +1386,7 @@ func (id ID) Uint()
 func (id ID) Uint64()
 ```
 
-上面语句在 es 插入了两条数据，如下，我们可以看到 updated_at 和 created_at 的时间格式，在未指定 time_fmt 的情况下，时间会被编码成 
+上面语句在 es 插入了两条数据，如下，我们可以看到 updated_at 和 created_at 的时间格式，在未指定 time_fmt 的情况下，时间会被编码成
 RFC3339 格式，如果希望修改格式，可以指定 time_fmt，但是struct的接收字段类型必须是 types.Time，否则在 Find 的时候，Receive 解析会异常。
 ```eslint
 GET /es_student/_search
@@ -1456,7 +1457,6 @@ GET /es_student/_search
   }
 }
 ```
-
 # 查询语句
 ## 指定查询列
 通过 `Column` 指定要查询的列。
@@ -1570,7 +1570,7 @@ SQL语句：
 SELECT * FROM `student` WHERE `identify` IN (2024080313, 2024092316)  LIMIT 100
 ```
 
-### Elastic 主键
+### Elastic主键
 Elastic 默认在插入数据的时候会自动生成主键值，他的主键为 `_id`，按照 `_id` 批量插入有几种方式：
 - orm 标签加上 `es_id` 属性会指定字段值作为 es 的主键，如下 `id` 字段：
 ```go
@@ -1993,7 +1993,7 @@ func queryCompWhere4(ctx context.Context) {
 	...
 }
 ```
-### 模糊匹配
+### 模糊查询
 #### SQL LIKE 
 在数据库引擎为 sql 相关系统时，`~` 操作符表示 LIKE。
 - 示例1：
@@ -2942,100 +2942,9 @@ func queryHighlight(ctx context.Context) {
 ## INSERT 语句
 Insert 函数可以插入各种类型的数据，比如 struct、map、struct数组、map数组。
 
-### 插入 map 数据
-我们可以通过 `Insert` 传入 map 数据，插入单条数据。
-- 示例 1，MySQL 插入新数据，返回`horm.ModRet`，如果不关心返回，可以不传 modRet：
-```go
-func insertMap(ctx context.Context) {
-	data := horm.Map{
-		"id":         235842198988402689,
-		"identify":   2024061211,
-		"name":       "metcalfe",
-		"gender":     2,
-		"age":        39,
-		"score":      93.8,
-		"article":    "contribution to leading the public into the era of hyper-connectivity",
-		"exam_time":  "15:30:00",
-		"image":      "SU1BR0UuUENH",
-		"birthday":   "1976-08-27",
-		"created_at": time.Now(),
-		"updated_at": time.Now(),
-	}
-
-	modRet := proto.ModRet{}
-	_, err := horm.NewQuery("student").Insert(data).Exec(ctx, &modRet)
-
-	...
-}
-```
-
-返回数据如下：
-```json
-{
-    "id": "235842198988402689",
-    "rows_affected": 1
-}
-```
-
-在 horm，我们用 proto.ModRet 来接收单条记录的插入结果，该结构体如下：
-```go
-// ModRet 新增/更新返回信息
-type ModRet struct {
-	ID          ID                     `orm:"id,omitempty" json:"id,omitempty"`                       // id 主键，可能是 mysql 的最后自增id，last_insert_id 或 elastic 的 _id 等，类型可能是 int64、string
-	RowAffected int64                  `orm:"rows_affected,omitempty" json:"rows_affected,omitempty"` // 影响行数
-	Version     int64                  `orm:"version,omitempty" json:"version,omitempty"`             // 数据版本
-	Status      int                    `orm:"status,omitempty" json:"status,omitempty"`               // 返回状态码
-	Reason      string                 `orm:"reason,omitempty" json:"reason,omitempty"`               // mod 失败原因
-	Extras      map[string]interface{} `orm:"extras,omitempty" json:"extras,omitempty"`               // 更多详细信息
-}
-
-type ID string
-
-func (id ID) String() string
-func (id ID) Float64() float64
-func (id ID) Int() int
-func (id ID) Int64() int64
-func (id ID) Uint()
-func (id ID) Uint64()
-```
-
-- 示例2，Elastic 通过 map 插入单条记录：
-```go
-func insertMapToElastic(ctx context.Context) {
-	data := horm.Map{
-		"_id":        66666, // Elastic 主键
-		"id":         66666,
-		"identify":   2024061211,
-		"name":       "metcalfe",
-		"gender":     2,
-		"age":        39,
-		"score":      93.8,
-		"article":    "contribution to leading the public into the era of hyper-connectivity",
-		"exam_time":  "15:30:00",
-		"image":      "SU1BR0UuUENH",
-		"birthday":   "1976-08-27",
-		"created_at": time.Now(),
-		"updated_at": time.Now(),
-	}
-
-	modRet := proto.ModRet{}
-	_, err := horm.NewQuery("es_student").Insert(data).Exec(ctx, &modRet)
-
-	...
-}
-```
-返回结果：
-```json
-{
-    "_id":"v03bpIEBL4QnOSO-YOvH",
-    "version":1,
-    "rows_affected":1
-}
-```
-
 ### 插入 struct 数据
-`Insert` 函数传参还可以是 struct 结构体，详细的结构体及`orm`标签的解释可以参考章节 [结构体标签](#结构体标签)。
-
+`Insert` 函数传参可以是 struct 结构体，详细的结构体及`orm`标签的解释可以参考章节 [结构体标签](#结构体标签)，
+返回 `proto.ModRet`，如果不关心返回，可以不传：
 ```go
 type Student struct {
 	Id        uint64     `orm:"id,uint64,onuniqueid" json:"id"`
@@ -3070,8 +2979,8 @@ func insertStruct(ctx context.Context) {
 		Birthday: types.Time(birthday),
 	}
 
-	modRets := make([]*proto.ModRet, 0)
-	_, err := horm.NewQuery("student").Insert(&data).Exec(ctx, &modRets)
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("student").Insert(&data).Exec(ctx, &modRet)
 	
 	...
 }
@@ -3085,157 +2994,154 @@ func insertStruct(ctx context.Context) {
 }
 ```
 
-
-### 批量插入数据
-`Insert`函数用于插入多条数据。
-- 示例 1，MySQL 插入新数据，返回 `horm.ModRet`，如果不关心返回，可以不传 result：
+在 horm，我们用 `proto.ModRet` 来接收单条记录的插入结果，该结构体如下：
 ```go
-func Test(ctx context.Context) {
-	datas := []*Student{
-		{
-			ClassId: 1,
-			Sex:     "male",
-			Age:     22,
-			Name:    "smallhow",
-		},
-		{
-			ClassId: 2,
-			Sex:     "female",
-			Age:     19,
-			Name:    "jerry",
-		},
+// ModRet 新增/更新返回信息
+type ModRet struct {
+	ID          ID                     `orm:"id,omitempty" json:"id,omitempty"`                       // id 主键，可能是 mysql 的最后自增id，last_insert_id 或 elastic 的 _id 等，类型可能是 int64、string
+	RowAffected int64                  `orm:"rows_affected,omitempty" json:"rows_affected,omitempty"` // 影响行数
+	Version     int64                  `orm:"version,omitempty" json:"version,omitempty"`             // 数据版本
+	Status      int                    `orm:"status,omitempty" json:"status,omitempty"`               // 返回状态码
+	Reason      string                 `orm:"reason,omitempty" json:"reason,omitempty"`               // mod 失败原因
+	Extras      map[string]interface{} `orm:"extras,omitempty" json:"extras,omitempty"`               // 更多详细信息
+}
+
+type ID string
+
+func (id ID) String() string
+func (id ID) Float64() float64
+func (id ID) Int() int
+func (id ID) Int64() int64
+func (id ID) Uint()
+func (id ID) Uint64()
+```
+
+### 插入 map 数据
+`Insert` 还可以传入 map 数据来插入单条数据：
+- 示例 1：
+```go
+func insertMap(ctx context.Context) {
+	data := horm.Map{
+		"id":         235842198988402689,
+		"identify":   2024061211,
+		"name":       "metcalfe",
+		"gender":     2,
+		"age":        39,
+		"score":      93.8,
+		"article":    "contribution to leading the public into the era of hyper-connectivity",
+		"exam_time":  "15:30:00",
+		"image":      "SU1BR0UuUENH",
+		"birthday":   "1976-08-27",
+		"created_at": time.Now(),
+		"updated_at": time.Now(),
 	}
 
-	result := horm.ModRet{}
-	err := horm.NewQuery("student").Insert(&datas).Exec(ctx, &result)
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("student").Insert(data).Exec(ctx, &modRet)
+
+	...
+}
+```
+
+返回数据如下：
+```json
+{
+    "id": "235842198988402689",
+    "rows_affected": 1
+}
+```
+
+- 示例2，Elastic 通过 map 插入单条记录：
+```go
+func insertMapToElastic(ctx context.Context) {
+	data := horm.Map{
+		"_id":        66666, // Elastic主键
+		"id":         66666,
+		"identify":   2024061211,
+		"name":       "metcalfe",
+		"gender":     2,
+		"age":        39,
+		"score":      93.8,
+		"article":    "contribution to leading the public into the era of hyper-connectivity",
+		"exam_time":  "15:30:00",
+		"image":      "SU1BR0UuUENH",
+		"birthday":   "1976-08-27",
+		"created_at": time.Now(),
+		"updated_at": time.Now(),
+	}
+
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").Insert(data).Exec(ctx, &modRet)
+
 	...
 }
 ```
 返回结果：
 ```json
 {
-    "last_insert_id":39923455,
-    "rows_affected":2
+    "_id":"v03bpIEBL4QnOSO-YOvH",
+    "version":1,
+    "rows_affected":1
 }
 ```
 
-- 示例2，Elastic 插入新数据，返回 `[]*horm.ModRet`，如果不关心返回，可以不传 result：
+### 批量插入数据
+`Insert` 函数接收的参数为map数组，或者 struct 数组的时候，就会执行批量插入，返回 `proto.ModRet`。
+- 示例 1：
 ```go
-func Test(ctx context.Context) {
-	datas := []*Student{
+func insertMapArray(ctx context.Context) {
+	datas := []horm.Map{
 		{
-			ClassId: 1,
-			Sex:     "male",
-			Age:     22,
-			Name:    "smallhow",
+			"id":         235842198988432689,
+			"identify":   2024061291,
+			"name":       "metcalfe",
+			"gender":     2,
+			"age":        39,
+			"score":      93.8,
+			"article":    "contribution to leading the public into the era of hyper-connectivity",
+			"exam_time":  "15:30:00",
+			"image":      "SU1BR0UuUENH",
+			"birthday":   "1976-08-27",
+			"created_at": time.Now(),
+			"updated_at": time.Now(),
 		},
 		{
-			ClassId: 2,
-			Sex:     "female",
-			Age:     19,
-			Name:    "jerry",
+			"id":         235842198988452699,
+			"identify":   2024070746,
+			"name":       "emerson",
+			"gender":     2,
+			"age":        36,
+			"score":      79.9,
+			"article":    "develop automated methods to detect design errors in computer hardware and software",
+			"exam_time":  "15:30:00",
+			"image":      "IMAGE.PCG",
+			"birthday":   "1976-08-27",
+			"created_at": time.Now(),
+			"updated_at": time.Now(),
 		},
 	}
 
-	result := make([]*horm.ModRet, 0)
-	err := horm.NewQuery("es_student").Insert(&datas).Exec(ctx, &result)
+	modRet := proto.ModRet{}
+	_, err := horm.NewQuery("student").Insert(&datas).Exec(ctx, &modRet)
 
-	if horm.IsError(err) {
-		fmt.Printf("batch insert student error: %v", err)
-		return
-	}
-
-	if horm.IsAllSuccess(result) {
-		fmt.Printf("batch insert success")
-		return
-	}
 	...
 }
 ```
-
 返回结果：
-
-可以通过 `horm.IsAllSuccess` 判断是否全部数据都插入成功，当只有部分成功的时候，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因：
 ```json
-[
-    {
-        "_id":"wU3spIEBL4QnOSO-F-tV",
-        "version":1,
-        "rows_affected":1,
-        "status":0,
-        "reason":""
-    },
-    {
-        "_id":"wk3spIEBL4QnOSO-F-tV",
-        "version":1,
-        "rows_affected":1,
-        "status":0,
-        "reason":""
-    }
-]
-```
-
-- 示例3，Elastic 根据 `_id` 插入新数据，返回 `[]*horm.ModRet`，如果不关心返回，可以不传 result：
-```go
-func Test(ctx context.Context) {
-	datas := []*Student{
-		{
-			Userid:  2233455,
-			ClassId: 1,
-			Sex:     "male",
-			Age:     22,
-			Name:    "smallhow",
-		},
-		{
-			Userid:  2233456,
-			ClassId: 2,
-			Sex:     "female",
-			Age:     19,
-			Name:    "jerry",
-		},
-	}
-
-	ids := []int{2233455, 2233456}
-
-	result := make([]*horm.ModRet, 0)
-	err := horm.NewQuery("es_student").Insert(&datas).Eq("_id", ids).Exec(ctx, &result)
-	
-	if horm.IsError(err) {
-		fmt.Printf("batch insert student error: %v", err)
-		return
-	}
-
-	if horm.IsAllSuccess(result) {
-		fmt.Printf("batch insert success")
-		return
-	}
-	...
+{
+  "id": "235842198988452699",
+  "rows_affected": 2
 }
 ```
 
-返回结果：
+- Elastic 批量插入的时候，支持部分成功，所以返回 `[]*proto.ModRet` 来接收每一条数据的插入结果，可用 horm.IsAllSuccess 函数，具体案例可以参考章节 [全部成功](#全部成功)
+- Elastic 插入数据的时候指定主键，可以参考章节 [Elastic主键](#Elastic主键)
 
-可以通过 `horm.IsAllSuccess` 判断是否全部数据都插入成功，当只有部分成功的时候，我们可以遍历返回结果，`status` 为错误码，当 `status!=0` 则该条记录插入失败，`reason`为失败原因：
-```json
-[
-    {
-        "_id":"2233455",
-        "version":1,
-        "rows_affected":1,
-        "status":0,
-        "reason":""
-    },
-    {
-        "_id":"2233456",
-        "version":1,
-        "rows_affected":1,
-        "status":0,
-        "reason":""
-    }
-]
-```
+
 ## REPLACE 语句
-replace 和 insert 函数类似，只不过是把 sql 关键词 insert 替换为 replace，可以参考 insert 的写法。也是支持 `ReplaceMap`、`ReplaceStruct`、`ReplaceStructs` 三个函数。
+replace 和 insert 函数类似，只不过是把 sql 关键词 insert 替换为 replace，函数为 `Replace`，
+参数同样支持 struct、map、struct数组、map数组，具体用法可以参考 insert。
 
 `注意：elastic search 不支持 replace`
 
@@ -3251,7 +3157,7 @@ func Test(ctx context.Context) {
 		"age":      21,
 	}
 
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("student").UpdateMap(data).Eq("userid", 9713).Exec(ctx, &result)
 	...
 }
@@ -3275,7 +3181,7 @@ func Test(ctx context.Context) {
 
 	where := horm.Where{"userid": 2233456}
 	
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("student").UpdateMap(data, where).Exec(ctx, &result)
 	...
 }
@@ -3292,7 +3198,7 @@ func Test(ctx context.Context) {
 
 	where := horm.Where{"userid": 2233456}
 	
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("es_student").UpdateMap(data, where).Exec(ctx, &result)
 	...
 }
@@ -3335,7 +3241,7 @@ func Test(ctx context.Context) {
 		"age":      22,
 	}
 
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("es_student").UpdateMap(data).Eq("_id", 2233456).Exec(ctx, &result)
 	...
 }
@@ -3373,7 +3279,7 @@ func Test(ctx context.Context) {
 		Name:    "smallhow",
 	}
 
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("student").UpdateStruct(data).Eq("userid", 6348).Exec(ctx, &result)
 	...
 }
@@ -3387,7 +3293,7 @@ delete 比较简单，就只需要加上 where 条件即可。
 func Test(ctx context.Context) {
 	where := horm.Where{"age": 33}
 
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("student").Delete(where).Exec(ctx, &result)
 	...
 }
@@ -3405,7 +3311,7 @@ func Test(ctx context.Context) {
 func Test(ctx context.Context) {
 	where := horm.Where{"age": 22}
 
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("es_student").Delete(where).Exec(ctx, &result)
 	...
 }
@@ -3420,7 +3326,7 @@ func Test(ctx context.Context) {
 - 示例3（elastic by _id）
 ```go
 func Test(ctx context.Context) {
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("es_student").Delete().Eq("_id", "w001qIEBL4QnOSO-k-s5").Exec(ctx, &result)
 	...
 }
@@ -3448,7 +3354,7 @@ func Test(ctx context.Context) {
 		"age":      22,
 	}
 
-	result := horm.ModRet{}
+	result := proto.ModRet{}
 	err := horm.NewQuery("es_student").UpdateMap(data).Eq("_id", 2233456).
 		Refresh().        // 更新数据立即刷新
 		Exec(ctx, &result)
