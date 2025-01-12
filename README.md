@@ -3335,84 +3335,118 @@ func updateStruct(ctx context.Context) {
 其他示例和更新 map 类似，我们主要是关注 omitupdateempty、omitempty、onupdatetime 标签属性对更新的影响。
 
 ## DELETE 数据
-delete 比较简单，就只需要加上 where 条件即可。
 - 示例1（mysql）
 ```go
-func Test(ctx context.Context) {
-	where := horm.Where{"age": 33}
+func deleteByWhere(ctx context.Context) {
+	where := horm.Where{"name": "metcalfe"}
 
-	result := proto.ModRet{}
-	err := horm.NewQuery("student").Delete(where).Exec(ctx, &result)
+	ret := proto.ModRet{}
+	_, err := horm.NewQuery("student").Delete(where).Exec(ctx, &ret)
+	
 	...
 }
 ```
 返回结果：
 ```json
 {
-    "last_insert_id":0,
+  "rows_affected": 1
+}
+```
+
+- 示例2（Elastic delete by query）
+
+```go
+func deleteByWhere(ctx context.Context) {
+	where := horm.Where{"name": "metcalfe"}
+
+	ret := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").Delete(where).Exec(ctx, &ret)
+	
+	...
+}
+```
+
+生成的 es 请求：
+```eslint
+POST /es_student/_doc/_delete_by_query?refresh=false
+{
+    "query": {
+        "bool": {
+            "filter": {
+                "terms": {
+                    "name": ["metcalfe"]
+                }
+            }
+        }
+    }
+}
+```
+返回结果：
+```json
+{
     "rows_affected":2
 }
 ```
 
-- 示例2（elastic by query）
+- 示例3（Elastic delete by _id）
 ```go
-func Test(ctx context.Context) {
-	where := horm.Where{"age": 22}
-
-	result := proto.ModRet{}
-	err := horm.NewQuery("es_student").Delete(where).Exec(ctx, &result)
+func deleteEsByID(ctx context.Context) {
+	ret := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").Delete().ID(999).Exec(ctx, &ret)
 	...
 }
 ```
-返回结果：
-```json
-{
-    "rows_affected":5
-}
+
+生成的 es 请求:
+```eslint
+DELETE /es_student/_doc/999?refresh=false
 ```
 
-- 示例3（elastic by _id）
-```go
-func Test(ctx context.Context) {
-	result := proto.ModRet{}
-	err := horm.NewQuery("es_student").Delete().Eq("_id", "w001qIEBL4QnOSO-k-s5").Exec(ctx, &result)
-	...
-}
-```
 返回结果：
 ```json
 {
-    "_id":"w001qIEBL4QnOSO-k-s5",
+    "_id":"999",
     "version":2,
-    "rows_affected":1,
-    "status":0,
-    "reason":""
+    "rows_affected":1
 }
 ```
 
-
-## refresh 刷新（elastic 特有）
-通过 `Refresh(true)` 函数可以使 elastic 在更新数据之后立即刷新，当然，这个会导致 elastic search 的压力增大。
+## refresh 刷新
+在 Elastic 通过 `Refresh(true)` 函数可以使数据在更新之后立即被刷新，当然，这个会导致 Elastic Search 的压力增大。
 ```go
-func Test(ctx context.Context) {
+func updateEsByIDRefresh(ctx context.Context) {
 	data := horm.Map{
-		"class_id": 2,
-		"name":     "jerry",
-		"sex":      "male",
-		"age":      22,
+		"exam_time":  "15:45:00",
+		"updated_at": time.Now(),
 	}
 
-	result := proto.ModRet{}
-	err := horm.NewQuery("es_student").UpdateMap(data).Eq("_id", 2233456).
-		Refresh().        // 更新数据立即刷新
-		Exec(ctx, &result)
+	ret := proto.ModRet{}
+	_, err := horm.NewQuery("es_student").Update(data).ID(234062949419855874).Refresh().Exec(ctx, &ret)
 	...
+}
+```
+
+生成的 es 请求：
+```eslint
+POST /es_student/_update/234062949419855874?refresh=true
+{
+    "script": {
+        "params": {
+            "exam_time": "15:45:00",
+            "updated_at": "2025-01-12T09:19:57.578219+08:00"
+        },
+        "source": "ctx._source.exam_time=params.exam_time;ctx._source.updated_at=params.updated_at"
+    }
 }
 ```
 
 # redis 协议
 ## Prefix（强烈建议使用）
-`Prefix` 可以为我们的 key 加上前缀，如下真正的 key 就是 `student_13324` ，`强烈建议所有 key 都加上前缀，便于服务端对具体业务数据的统计与数据看盘，能够更好的定位具体的业务量级、请求暴增等情况。`，
+`Prefix` 可以为我们的 key 加上前缀，如下案例真正的 key 就是 `student_13324`，（后面的案例，为了便捷，我都省略了 `Prefix`）。<br>
+
+`强烈建议所有 key 都加上前缀，便于数据统一接入服务根据 Prefix 来对不同的对象的区分统计，如果没有加 Prefix，所有 key 都在一个库里面，
+比如有 student_12354, teacher_38495，那么我们如果希望统计每天查询 student 的请求量是多少，则无法统计，也无法更好的定位具体是哪个对象
+发生了请求突发暴增的情况。`，
 
 ```go
 func Test(ctx context.Context) {
@@ -3490,7 +3524,6 @@ func Test(ctx context.Context) {
 * 返回 `member 和 score（类型为 [][]byte、[]float64）`，这类操作包含 `ZRANGE ... WITHSCORES` 、 `ZRANGEBYSCORE ... WITHSCORES` 、 `ZREVRANGE ... WITHSCORES` 、 `ZREVRANGEBYSCORE ... WITHSCORES`
 
 ## Redis 键
-下面示例为了便捷，我都省略 `Prefix`。
 - `EXPIRE`
   函数用法：
 ```go
