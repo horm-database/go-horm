@@ -3441,78 +3441,64 @@ POST /es_student/_update/234062949419855874?refresh=true
 ```
 
 # redis 协议
-## Prefix（强烈建议使用）
-`Prefix` 可以为我们的 key 加上前缀，如下案例真正的 key 就是 `student_13324`，（后面的案例，为了便捷，我都省略了 `Prefix`）。<br>
+## Prefix（非常强烈建议使用）
+`Prefix` 可以为我们的 key 加上前缀，如下案例真正的 key 就是 `student_2024080313`，（后面的案例，为了便捷，我都省略了 `Prefix`）。<br>
 
 `强烈建议所有 key 都加上前缀，便于数据统一接入服务根据 Prefix 来对不同的对象的区分统计，如果没有加 Prefix，所有 key 都在一个库里面，
-比如有 student_12354, teacher_38495，那么我们如果希望统计每天查询 student 的请求量是多少，则无法统计，也无法更好的定位具体是哪个对象
-发生了请求突发暴增的情况。`，
+比如有 student_2024080313, teacher_Simon，那么我们如果希望统计每天查询 student 的请求量是多少，则无法统计，也无法更好的定位具体是哪个对象
+发生了请求突发暴增的情况。`
 
 ```go
-func Test(ctx context.Context) {
-	result := Student{}
-	err := horm.NewQuery("redis_student").Prefix("student_").Get("13324").Exec(ctx, &result)
-	if horm.IsError(err) {
-		fmt.Println("find student error: %v", err)
-		return
-	}
+func testRedisPrefix(ctx context.Context) {
+	var result int
+	isNil, err := horm.NewQuery("redis_student").
+		Prefix("student_").Get("2024080313").Exec(ctx, &result)
 
-	if horm.IsNil(err) { // err = nil returned
-		fmt.Println("student not exists")
-	}
+	// GET student_2024080313
+	...
 }
+
 ```
 
 ## 编码与解码
-通过 `WithCoder` ，我们可以为 redis 自定义编解码器。如果未使用，则采用默认编解码器，
-```go
-// WithCoder 更换编解码器
-func (s *Statement) WithCoder(coder RCodec) *Statement {
-	s.Coder = coder
-	return s
-}
+我们会有默认的编码器，例如下面的 Set 操作，默认编码器会将 data 编码为 `json` 字符串，然后 set 到 redis，在 Get 函数，
+可以传入 `Student 结构体指针`，去接收解码后的返回结果。
 
-// GetCoder 获取编解码器
-func (s *Statement) GetCoder() RCodec {
-	if s.Coder != nil {
-		return s.Coder
-	}
-	//返回默认编码器
-	return RCodecJSON
-}
-```
-如下示例，我们在 Set 的时候，会采用默认编解码器将 data 编码为 `json` 字符串，然后 set 到 redis，在 Get 函数，我们传入 `Student 结构体指针`，去接收解码后的返回结果。
 ```go
-func Test(ctx context.Context) {
+func testRedisCoder(ctx context.Context) {
+	birthday, _ := time.Parse("2006-01-02", "1976-08-27")
 	data := Student{
-		Userid:  13324,
-		ClassId: 1,
-		Sex:     "male",
-		Age:     23,
-		Name:    "smallhow",
-		Status:  1,
+		Identify: 2024061211,
+		Gender:   2,
+		Age:      39,
+		Name:     "metcalfe",
+		Score:    93.8,
+		Image:    []byte("IMAGE.PCG"),
+		Article:  "contribution to leading the public into the era of hyper-connectivity",
+		ExamTime: "15:30:00",
+		Birthday: types.Time(birthday),
 	}
 
-	err := horm.NewQuery("redis_student").Prefix("student_").Set("13324", data).Exec(ctx)
-	if horm.IsError(err) {
-		fmt.Println("find student error: %v", err)
+	_, err := horm.NewQuery("redis_student").Prefix("student_").Set("2024061211", data).Exec(ctx)
+	if err != nil {
+		fmt.Println("set student to redis error: ", err)
 		return
 	}
+
+	// SET student_2024061211 {\"age\":39,\"image\":\"SU1BR0UuUENH\",\"id\":236629372784619521,\"article\":\"contribution to leading the public into the era of hyper-connectivity\",\"updated_at\":\"2025-01-12T23:20:38.833523+08:00\",\"identify\":2024061211,\"gender\":2,\"created_at\":\"2025-01-12T23:20:38.833534+08:00\",\"name\":\"metcalfe\",\"score\":93.8,\"exam_time\":\"15:30:00\",\"birthday\":\"1976-08-27\"}
 
 	result := Student{}
-	err = horm.NewQuery("redis_student").Prefix("student_").Get("13324").Exec(ctx, &result)
-	if horm.IsError(err) {
-		fmt.Println("find student error: %v", err)
-		return
-	}
-
-	if horm.IsNil(err) { // err = nil returned
-		fmt.Println("student not exists")
-	}
+	isNil, err := horm.NewQuery("redis_student").Prefix("student_").Get("2024061211").Exec(ctx, &result)
+	
+	// GET student_2024061211
+	...
 }
+
 ```
 
-在没有编解码的情况下，比如复合查询模式下，返回的就是原始的 redis 数据，他返回8种类型的结构：
+horm 所有支持的 redis 操作，一共会返回8种类型的结构，在有编解码的情况下，这几种结构会以合理的方式写入接收对象，如果是复合查询，
+则是会将原始结构映射到复合查询的大 json 结果字段里面去：
+
 * 无返回，仅包含 error。这类操作包含 `EXPIRE` 、 `SET` 、  `SETEX` 、 `HSET` 、 `HMSET` ，仅返回 error，如果无 error 则执行成功。
 * 返回 `[]byte`，这类操作包含 `GET` 、 `GETSET` 、 `HGET` 、 `LPOP` 、 `RPOP`。
 * 返回 `bool`，这类操作包含 `EXISTS` 、 `SETNX` 、 `HEXISTS` 、 `HSETNX` 、 `SISMEMBER`。
@@ -3524,17 +3510,18 @@ func Test(ctx context.Context) {
 * 返回 `member 和 score（类型为 [][]byte、[]float64）`，这类操作包含 `ZRANGE ... WITHSCORES` 、 `ZRANGEBYSCORE ... WITHSCORES` 、 `ZREVRANGE ... WITHSCORES` 、 `ZREVRANGEBYSCORE ... WITHSCORES`
 
 ## Redis 键
+后面 redis 案例为了简便，都未加 `Prefix`。
 - `EXPIRE`
   函数用法：
 ```go
 // Expire 设置 key 的过期时间，key 过期后将不再可用。单位以秒计。
 // param: key string
-// param: int ttl 到期时间，ttl秒
-Expire(key string, ttl int)
+// param: int seconds 到期时间
+Expire(key string, seconds int)
 ```
 使用示例：
 ```go
-err := horm.NewQuery("redis_student").Expire("student_13324", 3600).Exec(ctx)
+_, err := horm.NewQuery("redis_student").Expire("student_2024061211", 3600).Exec(ctx)
 ```
 - `TTL`
   函数用法：
@@ -3543,11 +3530,13 @@ err := horm.NewQuery("redis_student").Expire("student_13324", 3600).Exec(ctx)
 // param: string key
 TTL(key string) 
 ```
+
 使用示例：
 ```go
 var ttl int // 当 key 不存在时，返回 -2 。 当 key 存在但没有设置剩余生存时间时，返回 -1 。 否则，以秒为单位，返回 key 的剩余生存时间。
-err := horm.NewQuery("redis_student").TTL("student_13324").Exec(ctx, &ttl)
+_, err := horm.NewQuery("redis_student").TTL("student_2024061211").Exec(ctx, &ttl)
 ```
+
 - `EXISTS`
   函数用法：
 ```go
@@ -3558,7 +3547,7 @@ Exists(key string)
 使用示例：
 ```go
 var exists bool // 存在返回true，否则返回false
-err := horm.NewQuery("redis_student").Exists("student_13324").Exec(ctx, &exists)
+isNil, err := horm.NewQuery("redis_student").Exists("student_13324").Exec(ctx, &exists)
 ```
 - `DEL`
   函数用法：
@@ -3570,7 +3559,7 @@ Del(key string)
 使用示例：
 ```go
 var affectNum int // 被删除 key 的数量。
-err := horm.NewQuery("redis_student").Del("student_13324").Exec(ctx, &affectNum)
+isNil, err := horm.NewQuery("redis_student").Del("student_13324").Exec(ctx, &affectNum)
 ```
 ## 字符串
 - `SET`
@@ -3593,7 +3582,7 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("redis_student").Set("test_bool", true).Exec(ctx)
+isNil, err := horm.NewQuery("redis_student").Set("test_bool", true).Exec(ctx)
 err = horm.NewQuery("redis_student").Set("test_int", 78).Exec(ctx)
 err = horm.NewQuery("redis_student").Set("test_float", 63.2567).Exec(ctx)
 err = horm.NewQuery("redis_student").Set("test_string", "i am ok").Exec(ctx)
@@ -3619,7 +3608,7 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("redis_student").SetEX("test_bool", true, 3600).Exec(ctx)
+isNil, err := horm.NewQuery("redis_student").SetEX("test_bool", true, 3600).Exec(ctx)
 err = horm.NewQuery("redis_student").SetEX("test_int", 78, 3600).Exec(ctx)
 err = horm.NewQuery("redis_student").SetEX("test_float", 63.2567, 3600).Exec(ctx)
 err = horm.NewQuery("redis_student").SetEX("test_string", "i am ok", 86400).Exec(ctx)
@@ -3646,7 +3635,7 @@ data := Student{
 }
 
 var success bool // 设置成功，返回true 。设置失败，返回false
-err := horm.NewQuery("redis_student").SetNX("test_struct", data).Exec(ctx, &success)
+isNil, err := horm.NewQuery("redis_student").SetNX("test_struct", data).Exec(ctx, &success)
 ```
 - `GET`
   函数用法：
@@ -3658,7 +3647,7 @@ Get(key string)
 使用示例：
 ```go
 var bval bool
-err := horm.NewQuery("redis_student").Get("test_bool").Exec(ctx, &bval)
+isNil, err := horm.NewQuery("redis_student").Get("test_bool").Exec(ctx, &bval)
 	
 if horm.IsError(err) {
 	return err
@@ -3700,7 +3689,7 @@ data := Student{
 }
 
 var lastSet Student
-err := horm.NewQuery("redis_student").GetSet("test_struct", data).Exec(ctx, &lastSet)
+isNil, err := horm.NewQuery("redis_student").GetSet("test_struct", data).Exec(ctx, &lastSet)
 
 if horm.IsError(err) {
 	return err
@@ -3720,7 +3709,7 @@ Incr(key string)
 使用示例：
 ```go
 var ret int
-err := horm.NewQuery("redis_student").Incr("test_int").Exec(ctx, &ret)
+isNil, err := horm.NewQuery("redis_student").Incr("test_int").Exec(ctx, &ret)
 ```
 - `DECR`
   函数用法：
@@ -3732,7 +3721,7 @@ Decr(key string)
 使用示例：
 ```go
 var ret int
-err := horm.NewQuery("redis_student").Decr("test_int").Exec(ctx, &ret)
+isNil, err := horm.NewQuery("redis_student").Decr("test_int").Exec(ctx, &ret)
 ```
 - `INCRBY`
   函数用法：
@@ -3745,7 +3734,7 @@ IncrBy(key string, n int)
 使用示例：
 ```go
 var ret int
-err := horm.NewQuery("redis_student").IncrBy("test_int", 15).Exec(ctx, &ret)
+isNil, err := horm.NewQuery("redis_student").IncrBy("test_int", 15).Exec(ctx, &ret)
 ```
 - `MSET`
   函数用法：
@@ -3763,7 +3752,7 @@ mdata := map[string]interface{}{
 	"c": 25,
 }
 
-err := horm.NewQuery("redis_student").Prefix("user_age_").MSet(mdata).Exec(ctx)
+isNil, err := horm.NewQuery("redis_student").Prefix("user_age_").MSet(mdata).Exec(ctx)
 ```
 结果：
 ```bash
@@ -3786,7 +3775,7 @@ MGet(keys []string)
 ```go
 var result []int
 keys := []string{"a", "b", "c"}
-err := horm.NewQuery("redis_student").Prefix("user_age_").MGet(keys).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").Prefix("user_age_").MGet(keys).Exec(ctx, &result)
 ```
 
 - `SETBIT`
@@ -3840,7 +3829,7 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("redis_student").HSet("student", "13324", data).Exec(ctx)
+isNil, err := horm.NewQuery("redis_student").HSet("student", "13324", data).Exec(ctx)
 ```
 - `HSETNX`
   函数用法：
@@ -3855,7 +3844,7 @@ HSetNx(key string, filed interface{}, value interface{})
 使用示例：
 ```go
 var success bool // 设置成功，返回true 。 如果给定字段已经存在且没有操作被执行，返回 false。
-err := horm.NewQuery("redis_student").HSetNx("student_age", 13324, 22).Exec(ctx, &success)
+isNil, err := horm.NewQuery("redis_student").HSetNx("student_age", 13324, 22).Exec(ctx, &success)
 ```
 - `HMSET`
   函数用法：
@@ -3875,7 +3864,7 @@ data := map[string]interface{}{
 	"name":     "smallhow",
 }
 
-err := horm.NewQuery("redis_student").Prefix("student_").HmSet("13324", data).Exec(ctx)
+isNil, err := horm.NewQuery("redis_student").Prefix("student_").HmSet("13324", data).Exec(ctx)
 ```
 结果：
 ```bash
@@ -3909,7 +3898,7 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("redis_student").Prefix("student_").HmSetStruct("19827", data).Exec(ctx)
+isNil, err := horm.NewQuery("redis_student").Prefix("student_").HmSetStruct("19827", data).Exec(ctx)
 ```
 结果：
 ```bash
@@ -3937,10 +3926,10 @@ HmGet(key string, fields []string)
 fields := []string{"userid", "class_id", "sex", "age", "name"}
 
 var result Student //可以通过一个 struct 指针接收结果
-err := horm.NewQuery("redis_student").HmGet("student_19827", fields).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").HmGet("student_19827", fields).Exec(ctx, &result)
 
 var result map[string]interface{} //也可以通过一个 map 接收结果
-err := horm.NewQuery("redis_student").HmGet("student_19827", fields).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").HmGet("student_19827", fields).Exec(ctx, &result)
 ```
 - `HGET`
   函数用法：
@@ -3977,10 +3966,10 @@ func (s *Statement) HGetAll(key string)
 使用示例：
 ```go
 var result Student //可以通过一个 struct 指针接收结果
-err := horm.NewQuery("redis_student").HGETALL("student_19827", fields).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").HGETALL("student_19827", fields).Exec(ctx, &result)
 
 var result map[string]interface{} //也可以通过一个 map 接收结果
-err := horm.NewQuery("redis_student").HGETALL("student_19827", fields).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").HGETALL("student_19827", fields).Exec(ctx, &result)
 ```
 - `HKEYS`
   函数用法：
@@ -3992,7 +3981,7 @@ Hkeys(key string)
 使用示例：
 ```go
 var result []string
-err := horm.NewQuery("redis_student").Hkeys("student_19827").Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").Hkeys("student_19827").Exec(ctx, &result)
 ```
 
 - `HINCRBY`
@@ -4007,7 +3996,7 @@ HIncrBy(key string, field string, v int)
 使用示例：
 ```go
 var newAge int
-err := horm.NewQuery("redis_student").HIncrBy("student_19827", "age", 5).Exec(ctx, &newAge)
+isNil, err := horm.NewQuery("redis_student").HIncrBy("student_19827", "age", 5).Exec(ctx, &newAge)
 ```
 - `HDEL`
   函数用法：
@@ -4019,7 +4008,7 @@ HDel(key string, field ...interface{})
 使用示例：
 ```go
 var delNum int
-err := horm.NewQuery("redis_student").HDel("student", 19827, 23312, 98322).Exec(ctx, &delNum)
+isNil, err := horm.NewQuery("redis_student").HDel("student", 19827, 23312, 98322).Exec(ctx, &delNum)
 ```
 - `HEXISTS`
   函数用法：
@@ -4032,7 +4021,7 @@ HExists(key string, field string)
 使用示例：
 ```go
 var exist bool // field 是否存在，存在
-err := horm.NewQuery("redis_student").HExists("student", 19827).Exec(ctx, &exist)
+isNil, err := horm.NewQuery("redis_student").HExists("student", 19827).Exec(ctx, &exist)
 ```
 - `HLEN`
   函数用法：
@@ -4044,7 +4033,7 @@ HLen(key string)
 使用示例：
 ```go
 var num int
-err := horm.NewQuery("redis_student").HLen("student").Exec(ctx, &num)
+isNil, err := horm.NewQuery("redis_student").HLen("student").Exec(ctx, &num)
 ```
 - `HSTRLEN`
   函数用法：
@@ -4057,7 +4046,7 @@ HStrLen(key string, field interface{})
 使用示例：
 ```go
 var l int
-err := horm.NewQuery("redis_student").HStrLen("student_19827", "name").Exec(ctx, &l)
+isNil, err := horm.NewQuery("redis_student").HStrLen("student_19827", "name").Exec(ctx, &l)
 ```
 - `HINCRBYFLOAT`
   函数用法：
@@ -4071,7 +4060,7 @@ HIncrByFloat(key string, field string, v float64)
 使用示例：
 ```go
 var score float64
-err := horm.NewQuery("redis_student").HIncrByFloat("student_19827", "score", 0.7).Exec(ctx, &score)
+isNil, err := horm.NewQuery("redis_student").HIncrByFloat("student_19827", "score", 0.7).Exec(ctx, &score)
 ```
 - `HVALS`
   函数用法：
@@ -4083,7 +4072,7 @@ HVals(key string)
 使用示例：
 ```go
 var ages []int
-err := horm.NewQuery("redis_student").HVals("student_age").Exec(ctx, &ages)
+isNil, err := horm.NewQuery("redis_student").HVals("student_age").Exec(ctx, &ages)
 ```
 ## 列表
 - `LPUSH`
@@ -4106,7 +4095,7 @@ data := Student{
 }
 
 var n int // 执行 LPUSH 命令后，列表的长度。
-err := horm.NewQuery("redis_student").LPush("student_list", data).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").LPush("student_list", data).Exec(ctx, &n)
 ```
 - `RPUSH`
   函数用法：
@@ -4128,7 +4117,7 @@ data := Student{
 }
 
 var n int // 执行 RPUSH 命令后，列表的长度。
-err := horm.NewQuery("redis_student").RPush("student_list", data).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").RPush("student_list", data).Exec(ctx, &n)
 ```
 - `LPOP`
   函数用法：
@@ -4140,7 +4129,7 @@ LPop(key string)
 使用示例：
 ```go
 var result Student //用于接收返回的任意类型指针
-err := horm.NewQuery("redis_student").LPop("student_list").Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").LPop("student_list").Exec(ctx, &result)
 ```
 - `RPOP`
   函数用法：
@@ -4152,7 +4141,7 @@ RPop(key string)
 使用示例：
 ```go
 var result Student //用于接收返回的任意类型指针
-err := horm.NewQuery("redis_student").RPop("student_list").Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").RPop("student_list").Exec(ctx, &result)
 ```
 
 - `LLEN`
@@ -4165,7 +4154,7 @@ LLen(key string)
 使用示例：
 ```go
 var n int
-err := horm.NewQuery("redis_student").LLen("student_list").Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").LLen("student_list").Exec(ctx, &n)
 ```
 
 ## 集合
@@ -4189,7 +4178,7 @@ data := Student{
 }
 
 var n int //被添加到集合中的新元素的数量，不包括被忽略的元素。
-err := horm.NewQuery("redis_student").SAdd("student_set", data).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").SAdd("student_set", data).Exec(ctx, &n)
 ```
 - `SMEMBERS`
   函数用法：
@@ -4201,7 +4190,7 @@ SMembers(key string)
 使用示例：
 ```go
 var result []*Student
-err := horm.NewQuery("redis_student").SMembers("student_set").Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").SMembers("student_set").Exec(ctx, &result)
 ```
 - `SREM`
   函数用法：
@@ -4214,7 +4203,7 @@ SRem(key string, members ...interface{})
 使用示例：
 ```go
 var n int // 被成功移除的元素的数量，不包括被忽略的元素。
-err := horm.NewQuery("redis_student").SRem("student_set", data).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").SRem("student_set", data).Exec(ctx, &n)
 ```
 - `SCARD`
   函数用法：
@@ -4226,7 +4215,7 @@ SCard(key string)
 使用示例：
 ```go
 var n int // 被成功移除的元素的数量，不包括被忽略的元素。
-err := horm.NewQuery("redis_student").SCard("student_set").Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").SCard("student_set").Exec(ctx, &n)
 ```
 - `SISMEMBER`
   函数用法：
@@ -4248,7 +4237,7 @@ data := Student{
 }
 
 var isMember bool
-err := horm.NewQuery("redis_student").SIsMember("student_set", data).Exec(ctx, &isMember)
+isNil, err := horm.NewQuery("redis_student").SIsMember("student_set", data).Exec(ctx, &isMember)
 ```
 - `SRANDMEMBER`
   函数用法：
@@ -4264,7 +4253,7 @@ SRandMember(key string, count int)
 使用示例：
 ```go
 var result []*Student
-err := horm.NewQuery("redis_student").SRandMember("student_set", 2).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").SRandMember("student_set", 2).Exec(ctx, &result)
 ```
 - `SPOP`
   函数用法：
@@ -4277,7 +4266,7 @@ SPop(key string, count int)
 使用示例：
 ```go
 var result []*Student
-err := horm.NewQuery("redis_student").SPop("student_set", 2).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").SPop("student_set", 2).Exec(ctx, &result)
 ```
 - `SMOVE`
   函数用法：
@@ -4299,7 +4288,7 @@ data := Student{
 	Status:  1,
 }
 
-err := horm.NewQuery("redis_student").SMOVE("student_set", "student_set2", &data).Exec(ctx)
+isNil, err := horm.NewQuery("redis_student").SMOVE("student_set", "student_set2", &data).Exec(ctx)
 ```
 ## 有序集
 - `ZADD`
@@ -4334,7 +4323,7 @@ data2 := Student{
 }
 
 var n int // 被成功添加的新成员的数量，不包括那些被更新的、已经存在的成员。
-err := horm.NewQuery("redis_student").ZAdd("student_zset", &data1, 97, &data2, 89).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").ZAdd("student_zset", &data1, 97, &data2, 89).Exec(ctx, &n)
 ```
 - `ZREM`
   函数用法：
@@ -4356,7 +4345,7 @@ data := Student{
 }
 
 var n int // 被成功移除的成员的数量，不包括被忽略的成员。
-err := horm.NewQuery("redis_student").ZRem("student_zset", &data).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").ZRem("student_zset", &data).Exec(ctx, &n)
 ```
 - `ZREMRANGEBYSCORE`
   函数用法：
@@ -4369,7 +4358,7 @@ ZRemRangeByScore(key string, min, max interface{})
 使用示例：
 ```go
 var n int // 被移除成员的数量。
-err := horm.NewQuery("redis_student").ZRemRangeByScore("student_zset", 90, 100).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").ZRemRangeByScore("student_zset", 90, 100).Exec(ctx, &n)
 ```
 - `ZREMRANGEBYRANK`
   函数用法：
@@ -4382,7 +4371,7 @@ ZRemRangeByRank(key string, start, stop int)
 使用示例：
 ```go
 var n int // 被移除成员的数量。
-err := horm.NewQuery("redis_student").ZRemRangeByRank("student_zset", 0, 2).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").ZRemRangeByRank("student_zset", 0, 2).Exec(ctx, &n)
 ```
 - `ZCARD`
   函数用法：
@@ -4394,7 +4383,7 @@ ZCard(key string)
 使用示例：
 ```go
 var n int
-err := horm.NewQuery("redis_student").ZCard("student_zset").Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").ZCard("student_zset").Exec(ctx, &n)
 ```
 - `ZSCORE`
   函数用法：
@@ -4416,7 +4405,7 @@ data := Student{
 }
 
 var score float64
-err := horm.NewQuery("redis_student").ZScore("student_zset", &data).Exec(ctx, &score)
+isNil, err := horm.NewQuery("redis_student").ZScore("student_zset", &data).Exec(ctx, &score)
 ```
 - `ZRANK`
   函数用法：
@@ -4438,7 +4427,7 @@ data := Student{
 }
 
 var rank int
-err := horm.NewQuery("redis_student").ZRank("student_zset", &data).Exec(ctx, &rank)
+isNil, err := horm.NewQuery("redis_student").ZRank("student_zset", &data).Exec(ctx, &rank)
 ```
 - `ZREVRANK`
   函数用法：
@@ -4460,7 +4449,7 @@ data := Student{
 }
 
 var rank int
-err := horm.NewQuery("redis_student").ZRevRank("student_zset", &data).Exec(ctx, &rank)
+isNil, err := horm.NewQuery("redis_student").ZRevRank("student_zset", &data).Exec(ctx, &rank)
 ```
 - `ZCOUNT`
   函数用法：
@@ -4474,7 +4463,7 @@ ZCount(key string, min, max interface{})
 使用示例：
 ```go
 var n int
-err := horm.NewQuery("redis_student").ZCount("student_zset", 70, 80).Exec(ctx, &n)
+isNil, err := horm.NewQuery("redis_student").ZCount("student_zset", 70, 80).Exec(ctx, &n)
 ```
 - `ZPOPMIN`
   函数用法：
@@ -4489,7 +4478,7 @@ ZPopMin(key string, count ...int64)
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("redis_student").ZPopMin("student_zset", 2).Exec(ctx, &result, scores)
+isNil, err := horm.NewQuery("redis_student").ZPopMin("student_zset", 2).Exec(ctx, &result, scores)
 ```
 - `ZPOPMAX`
   函数用法：
@@ -4504,7 +4493,7 @@ ZPopMax(key string, count ...int64)
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("redis_student").ZPopMax("student_zset", 2).Exec(ctx, &result, &scores)
+isNil, err := horm.NewQuery("redis_student").ZPopMax("student_zset", 2).Exec(ctx, &result, &scores)
 ```
 - `ZINCRBY`
   函数用法：
@@ -4522,7 +4511,7 @@ ZIncrBy(key string, member, incr interface{})
 使用示例：
 ```go
 var newScore float64 // member 成员的新分数值。
-err = horm.NewQuery("redis_student").ZIncrBy("student_zset", &data, 9.5).Exec(ctx, &newScore)
+isNil, err := horm.NewQuery("redis_student").ZIncrBy("student_zset", &data, 9.5).Exec(ctx, &newScore)
 ```
 - `ZRANGE`
   函数用法：
@@ -4536,7 +4525,7 @@ ZRange(key string, start, stop int)
 使用示例：
 ```go
 var result []*Student
-err = horm.NewQuery("redis_student").ZRange("student_zset", 0, 9).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").ZRange("student_zset", 0, 9).Exec(ctx, &result)
 ```
 - `ZRANGE WITHSCORES`
   函数用法：
@@ -4551,7 +4540,7 @@ ZRangeWithScore(key string, start, stop int)
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("redis_student").ZRangeWithScore("student_zset", 0, 9).Exec(ctx, &result, &scores)
+isNil, err := horm.NewQuery("redis_student").ZRangeWithScore("student_zset", 0, 9).Exec(ctx, &result, &scores)
 ```
 返回结果：
 
@@ -4566,7 +4555,7 @@ ZRangeByScore(key string, min, max interface{})
 使用示例：
 ```go
 var result []*Student // 80分~90分之间
-err = horm.NewQuery("redis_student").ZRangeByScore("student_zset", 80, 90).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").ZRangeByScore("student_zset", 80, 90).Exec(ctx, &result)
 ```
 - `ZRangeByScoreWithLimit`
   函数用法：
@@ -4580,7 +4569,7 @@ ZRangeByScoreWithLimit(key string, min, max interface{}, offset, count int64)
 使用示例：
 ```go
 var result []*Student // 80分~90分之间，OFFSET=0，LIMIT=10
-err = horm.NewQuery("redis_student").ZRangeByScoreWithLimit("student_zset", 80, 90, 0, 10).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").ZRangeByScoreWithLimit("student_zset", 80, 90, 0, 10).Exec(ctx, &result)
 ```
 - `ZRangeByScoreWithScoreWithLimit`
   函数用法：
@@ -4595,7 +4584,7 @@ ZRangeByScoreWithScoreWithLimit(key string, min, max interface{}, offset, count 
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("redis_student").ZRangeByScoreWithScoreWithLimit("student_zset", 70, 100, 0, 10).Exec(ctx, &result, &scores)
+isNil, err := horm.NewQuery("redis_student").ZRangeByScoreWithScoreWithLimit("student_zset", 70, 100, 0, 10).Exec(ctx, &result, &scores)
 ```
 返回结果：
 
@@ -4611,7 +4600,7 @@ ZRangeByScoreWithScore(key string, min, max interface{})
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("redis_student").ZRangeByScoreWithScore("student_zset", 70, 100).Exec(ctx, &result, &scores)
+isNil, err := horm.NewQuery("redis_student").ZRangeByScoreWithScore("student_zset", 70, 100).Exec(ctx, &result, &scores)
 ```
 - `ZREVRANGE`
   函数用法：
@@ -4625,7 +4614,7 @@ ZRevRange(key string, start, stop int)
 使用示例：
 ```go
 var result []*Student
-err = horm.NewQuery("redis_student").ZRevRange("student_zset", 0, 9).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").ZRevRange("student_zset", 0, 9).Exec(ctx, &result)
 ```
 - `ZREVRANGE WITHSCORES`
   函数用法：
@@ -4640,7 +4629,7 @@ ZRevRangeWithScore(key string, start, stop int)
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("redis_student").ZRevRangeWithScore("student_zset", 0, 9).Exec(ctx, &result, &scores)
+isNil, err := horm.NewQuery("redis_student").ZRevRangeWithScore("student_zset", 0, 9).Exec(ctx, &result, &scores)
 ```
 返回结果：
 - `ZREVRANGEBYSCORE`
@@ -4654,7 +4643,7 @@ ZRevRangeByScore(key string, min, max interface{})
 使用示例：
 ```go
 var result []*Student // 80分~90分之间
-err = horm.NewQuery("redis_student").ZRevRangeByScore("student_zset", 80, 90).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").ZRevRangeByScore("student_zset", 80, 90).Exec(ctx, &result)
 ```
 - `ZRevRangeByScoreWithLimit`
   函数用法：
@@ -4668,7 +4657,7 @@ ZRevRangeByScoreWithLimit(key string, min, max interface{}, offset, count int64)
 使用示例：
 ```go
 var result []*Student // 80分~90分之间，OFFSET=0，LIMIT=10
-err = horm.NewQuery("redis_student").ZRevRangeByScoreWithLimit("student_zset", 80, 90, 0, 10).Exec(ctx, &result)
+isNil, err := horm.NewQuery("redis_student").ZRevRangeByScoreWithLimit("student_zset", 80, 90, 0, 10).Exec(ctx, &result)
 ```
 - `ZRevRangeByScoreWithScoreWithLimit`
   函数用法：
@@ -4683,7 +4672,7 @@ ZRevRangeByScoreWithScoreWithLimit(key string, min, max interface{}, offset, cou
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("redis_student").ZRevRangeByScoreWithScoreWithLimit("student_zset", 70, 100, 0, 10).Exec(ctx, &result, &scores)
+isNil, err := horm.NewQuery("redis_student").ZRevRangeByScoreWithScoreWithLimit("student_zset", 70, 100, 0, 10).Exec(ctx, &result, &scores)
 ```
 
 返回结果：
@@ -4701,5 +4690,5 @@ ZRevRangeByScoreWithScore(key string, min, max interface{})
 ```go
 var result []*Student
 var scores []float64 // 返回成员的分数，与 result 数组顺序一一对应。
-err = horm.NewQuery("redis_student").ZRevRangeByScoreWithScore("student_zset", 70, 100).Exec(ctx, &result, &scores)
+isNil, err := horm.NewQuery("redis_student").ZRevRangeByScoreWithScore("student_zset", 70, 100).Exec(ctx, &result, &scores)
 ```
