@@ -17,7 +17,6 @@ package horm
 import (
 	"strconv"
 
-	redigo "github.com/gomodule/redigo/redis"
 	"github.com/horm-database/common/consts"
 	"github.com/horm-database/common/errs"
 	"github.com/horm-database/common/types"
@@ -36,7 +35,7 @@ func (s *Query) Prefix(prefix string) *Query {
 func (s *Query) Expire(key string, seconds int) *Query {
 	s.ResultType = consts.RedisRetTypeNil
 	s.Op("EXPIRE")
-	s.setKey(key)
+	s.SetKey(key)
 	s.Unit.Val = seconds
 	return s
 }
@@ -46,7 +45,7 @@ func (s *Query) Expire(key string, seconds int) *Query {
 func (s *Query) TTL(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("TTL")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
@@ -55,7 +54,7 @@ func (s *Query) TTL(key string) *Query {
 func (s *Query) Exists(key string) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("EXISTS")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
@@ -64,45 +63,46 @@ func (s *Query) Exists(key string) *Query {
 func (s *Query) Del(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("DEL")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
 // Set 设置给定 key 的值。如果 key 已经存储其他值， Set 就覆写旧值。
 // param: key string
-// param: value interface{} 任意类型数据
-// param: args ...interface{} set的其他参数
-func (s *Query) Set(key string, value interface{}, args ...interface{}) *Query {
+// param: val interface{} 任意类型数据
+// param: params ...interface{} SET 其他参数:
+// 包含 [NX | XX] [GET] [EX seconds | PX milliseconds | EXAT unix-time-seconds | PXAT unix-time-milliseconds | KEEPTTL]
+func (s *Query) Set(key string, val interface{}, params ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("SET")
-	s.setKey(key)
-	s.setVal(value)
-
-	s.append(args...)
+	s.SetKey(key)
+	s.SetVal(val)
+	s.setRedisParams(consts.SetParams, params...)
 	return s
 }
 
 // SetEX 指定的 key 设置值及其过期时间。如果 key 已经存在， SETEX 命令将会替换旧的值。
 // param: key string
-// param: v interface{} 任意类型数据
-// param: ttl int 到期时间
-func (s *Query) SetEX(key string, v interface{}, ttl int) *Query {
+// param: val interface{} 任意类型数据
+// param: seconds int 到期时间
+func (s *Query) SetEX(key string, val interface{}, seconds int) *Query {
 	s.ResultType = consts.RedisRetTypeNil
 	s.Op("SETEX")
-	s.setKey(key)
-	s.append(ttl, s.structToMap(v))
+	s.SetKey(key)
+	s.SetVal(val)
+	s.setRedisParams(consts.SetExParams, "seconds", seconds)
 	return s
 }
 
 // SetNX redis.SetNX
 // 指定的 key 不存在时，为 key 设置指定的值。
 // param: key string
-// param: v interface{} 任意类型数据
-func (s *Query) SetNX(key string, v interface{}) *Query {
+// param: val interface{} 任意类型数据
+func (s *Query) SetNX(key string, val interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("SETNX")
-	s.setKey(key)
-	s.append(s.structToMap(v))
+	s.SetKey(key)
+	s.SetVal(val)
 	return s
 }
 
@@ -111,18 +111,18 @@ func (s *Query) SetNX(key string, v interface{}) *Query {
 func (s *Query) Get(key string) *Query {
 	s.ResultType = consts.RedisRetTypeString
 	s.Op("GET")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
 // GetSet 设置给定 key 的值。如果 key 已经存储其他值， GetSet 就覆写旧值，并返回原来的值，如果原来未设置值，则返回报错 nil returned
 // param: key string
-// param: v interface{} 任意类型数据
-func (s *Query) GetSet(key string, v interface{}) *Query {
+// param: val interface{} 任意类型数据
+func (s *Query) GetSet(key string, val interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeString
 	s.Op("GETSET")
-	s.setKey(key)
-	s.append(s.structToMap(v))
+	s.SetKey(key)
+	s.SetVal(val)
 	return s
 }
 
@@ -131,7 +131,7 @@ func (s *Query) GetSet(key string, v interface{}) *Query {
 func (s *Query) Incr(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("INCR")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
@@ -140,7 +140,7 @@ func (s *Query) Incr(key string) *Query {
 func (s *Query) Decr(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("DECR")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
@@ -150,53 +150,28 @@ func (s *Query) Decr(key string) *Query {
 func (s *Query) IncrBy(key string, n int) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("INCRBY")
-	s.setKey(key)
-	s.append(n)
+	s.SetKey(key)
+	s.Unit.Val = n
 	return s
 }
 
-// MSet 批量设置一个或多个 key-value 对
-// param: values map[string]interface{} // value will marshal
+// MSet 批量设置一个或多个 key-val 对
+// param: val hval 必须是 map 或者 struct
 // 注意，本接口 Prefix 一定要在 MSet 之前设置，这里所有的 key 都会被加上 Prefix
-func (s *Query) MSet(values map[string]interface{}) *Query {
+func (s *Query) MSet(val interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeNil
 	s.Op("MSET")
-
-	var i int
-	for k, v := range values {
-		if i == 0 {
-			s.setKey(k)
-			s.append(s.structToMap(v))
-		} else {
-			if s.Unit.Prefix != "" {
-				s.append(s.Unit.Prefix+k, s.structToMap(v))
-			} else {
-				s.append(k, s.structToMap(v))
-			}
-		}
-		i++
-	}
+	s.setRedisMap(val)
 	return s
 }
 
-// MGet 返回多个 key 的 value
+// MGet 返回多个 key 的 val
 // param: keys string
-func (s *Query) MGet(keys ...string) *Query {
+func (s *Query) MGet(keys ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeStrings
 	s.Op("MGET")
-
-	var i int
-	for _, k := range keys {
-		if i == 0 {
-			s.setKey(k)
-		} else {
-			if s.Unit.Prefix != "" {
-				s.append(s.Unit.Prefix + k)
-			} else {
-				s.append(k)
-			}
-		}
-		i++
+	for _, v := range keys {
+		s.Unit.Args = append(s.Unit.Args, types.ToString(v))
 	}
 	return s
 }
@@ -204,18 +179,18 @@ func (s *Query) MGet(keys ...string) *Query {
 // SetBit 设置或清除指定偏移量上的位
 // param: key string
 // param: offset uint32 参数必须大于或等于 0 ，小于 2^32 (bit 映射被限制在 512 MB 之内)
-// param: value bool true:设置为1,false：设置为0
-func (s *Query) SetBit(key string, offset uint32, value bool) *Query {
+// param: value int 1-设置, 0-清除
+func (s *Query) SetBit(key string, offset uint32, value int) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("SETBIT")
-	s.setKey(key)
+	s.SetKey(key)
 
-	arg := 0
-	if value {
-		arg = 1
+	if value != 0 && value != 1 {
+		s.Error = errs.Newf(errs.ErrReqParamInvalid, "SETBIT value must be 0 or 1")
+		return s
 	}
 
-	s.append(offset, arg)
+	s.setRedisParams(consts.SetGetBitParams, "offset", offset, "value", value)
 	return s
 }
 
@@ -225,8 +200,8 @@ func (s *Query) SetBit(key string, offset uint32, value bool) *Query {
 func (s *Query) GetBit(key string, offset uint32) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("GETBIT")
-	s.setKey(key)
-	s.append(offset)
+	s.SetKey(key)
+	s.setRedisParams(consts.SetGetBitParams, "offset", offset)
 	return s
 }
 
@@ -234,24 +209,47 @@ func (s *Query) GetBit(key string, offset uint32) *Query {
 // param: key string
 // param: start int 可以使用负数值： 比如 -1 表示最后一个字节， -2 表示倒数第二个字节，以此类推
 // param: end int 可以使用负数值： 比如 -1 表示最后一个字节， -2 表示倒数第二个字节，以此类推
-func (s *Query) BitCount(key string, start, end int) *Query {
+// param: [BYTE | BIT]
+func (s *Query) BitCount(key string, params ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("BITCOUNT")
-	s.setKey(key)
-	s.append(start, end)
+	s.SetKey(key)
+	s.setRedisParams(consts.BitCountParams, params...)
 	return s
 }
 
 // HSet 为哈希表中的字段赋值 。
 // param: key string
 // param: field interface{} 其中field建议为字符串,可以为整数，浮点数
-// param: v interface{} 任意类型数据
-// param: args ...interface{} 多条数据，按照filed,value 的格式，其中field建议为字符串,可以为整数，浮点数
-func (s *Query) HSet(key string, field, v interface{}, args ...interface{}) *Query {
+// param: val interface{} 任意类型数据
+// param: kvs ...interface{} 多条数据，按照filed,val 的格式，其中field建议为字符串,可以为整数，浮点数
+func (s *Query) HSet(key string, field, val interface{}, kvs ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeNil
 	s.Op("HSET")
-	s.setKey(key)
-	s.append(field, s.structToMap(v)).append(args...)
+	s.SetKey(key)
+
+	fieldStr := types.ToString(field)
+	v, _ := s.GetCoder().Encode(codec.EncodeTypeRedisVal, val)
+
+	if len(kvs) == 0 {
+		s.SetField(fieldStr)
+		s.SetVal(v)
+		return s
+	}
+
+	// 多个值则放在 data 里面
+	s.Unit.Data = map[string]interface{}{}
+	s.Unit.Data[fieldStr] = v
+
+	if len(kvs)%2 != 0 {
+		s.Error = errs.New(errs.ErrReqParamInvalid, "number of values not a multiple of 2")
+		return s
+	}
+
+	for i := 0; i < len(kvs); i += 2 {
+		value, _ := s.GetCoder().Encode(codec.EncodeTypeRedisVal, kvs[i+1])
+		s.Unit.Data[types.ToString(kvs[i])] = value
+	}
 
 	return s
 }
@@ -259,88 +257,76 @@ func (s *Query) HSet(key string, field, v interface{}, args ...interface{}) *Que
 // HSetNx 为哈希表中不存在的的字段赋值 。
 // param: key string
 // param: field string
-// param: value interface{}
-func (s *Query) HSetNx(key string, filed interface{}, value interface{}) *Query {
+// param: val interface{}
+func (s *Query) HSetNx(key string, field interface{}, val interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("HSETNX")
-	s.setKey(key)
-	s.append(filed, s.structToMap(value))
-
+	s.SetKey(key)
+	s.SetField(types.ToString(field))
+	v, _ := s.GetCoder().Encode(codec.EncodeTypeRedisVal, val)
+	s.SetVal(v)
 	return s
 }
 
 // HmSet 把 map/struct 数据设置到哈希表中。此命令会覆盖哈希表中已存在的字段。如果哈希表不存在，会创建一个空哈希表，并执行 HMSET 操作。
 // param: key string
-// param: v 必须是  map[string]interface{} 、或者 struct
-func (s *Query) HmSet(key string, v interface{}) *Query {
+// param: hval 必须是 map 或者 struct
+func (s *Query) HmSet(key string, hval interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeNil
 	s.Op("HMSET")
-	s.setKey(key)
-
-	// struct/map 转化为 redis HMSET 的 field/value 对
-	fieldValues, err := s.GetCoder().Encode(codec.EncodeTypeHmSET, v)
-	if err != nil {
-		s.Error = errs.Newf(errs.ErrClientEncode, "redis extend encode error: %v", err)
-		return s
-	}
-
-	if fieldValues == nil {
-		s.Error = errs.Newf(errs.ErrClientEncode, "redis extend encode value is nil")
-		return s
-	}
-
-	tmp := fieldValues.([]interface{})
-
-	return s.append(tmp...)
+	s.SetKey(key)
+	s.setRedisMap(hval)
+	return s
 }
 
 // HIncrBy 为哈希表中的字段值加上指定增量值。
 // param: key string
 // param: field string
 // param: n string 自增数量
-func (s *Query) HIncrBy(key string, field string, v int) *Query {
+func (s *Query) HIncrBy(key string, field interface{}, val int) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("HINCRBY")
-	s.setKey(key)
-	s.append(field, v)
-
+	s.SetKey(key)
+	s.SetField(types.ToString(field))
+	s.SetVal(val)
 	return s
 }
 
 // HIncrByFloat 为哈希表中的字段值加上指定增量浮点数。
 // param: key string
 // param: field string
-// param: v float64 自增数量
-func (s *Query) HIncrByFloat(key string, field string, v float64) *Query {
+// param: val float64 自增数量
+func (s *Query) HIncrByFloat(key string, field interface{}, val float64) *Query {
 	s.ResultType = consts.RedisRetTypeFloat64
 	s.Op("HINCRBYFLOAT")
-	s.setKey(key)
-	s.append(field, v)
-
+	s.SetKey(key)
+	s.SetField(types.ToString(field))
+	s.SetVal(val)
 	return s
 }
 
-// HGet 数据从redis hget 出来之后反序列化并赋值给 v
+// HGet 数据从redis hget 出来之后反序列化并赋值给 val
 // param: key string
 // param: field string
 func (s *Query) HGet(key string, field interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeString
 	s.Op("HGET")
-	s.setKey(key)
-	s.append(field)
+	s.SetKey(key)
+	s.SetField(types.ToString(field))
 	return s
 }
 
 // HmGet 返回哈希表中，一个或多个给定字段的值。
 // param: key string
 // param: fields string 需要返回的域
-func (s *Query) HmGet(key string, fields ...string) *Query {
+func (s *Query) HmGet(key string, fields ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeMapString
 	s.Op("HMGET")
-	s.setKey(key)
+	s.SetKey(key)
 
-	args := redigo.Args{}.AddFlat(fields)
-	s.append(args...)
+	for _, v := range fields {
+		s.Unit.Args = append(s.Unit.Args, types.ToString(v))
+	}
 
 	return s
 }
@@ -350,17 +336,21 @@ func (s *Query) HmGet(key string, fields ...string) *Query {
 func (s *Query) HGetAll(key string) *Query {
 	s.ResultType = consts.RedisRetTypeMapString
 	s.Op("HGETALL")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
 // HDel 删除哈希表 key 中的一个或多个指定字段，不存在的字段将被忽略。
-// param: keyfield interface{}，删除指定key的field数据，这里输入的第一参数为key，其他为多个field，至少得有一个field
-func (s *Query) HDel(key string, field ...interface{}) *Query {
+// param: key string
+// param: fields interface{}，删除指定key的fields数据，多个field，至少得有一个field
+func (s *Query) HDel(key string, fields ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("HDEL")
-	s.setKey(key)
-	s.append(field...)
+	s.SetKey(key)
+
+	for _, v := range fields {
+		s.Unit.Args = append(s.Unit.Args, types.ToString(v))
+	}
 
 	return s
 }
@@ -371,9 +361,8 @@ func (s *Query) HDel(key string, field ...interface{}) *Query {
 func (s *Query) HExists(key string, field interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("HEXISTS")
-	s.setKey(key)
-	s.append(field)
-
+	s.SetKey(key)
+	s.SetField(types.ToString(field))
 	return s
 }
 
@@ -382,7 +371,7 @@ func (s *Query) HExists(key string, field interface{}) *Query {
 func (s *Query) HLen(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("HLEN")
-	s.setKey(key)
+	s.SetKey(key)
 
 	return s
 }
@@ -393,8 +382,8 @@ func (s *Query) HLen(key string) *Query {
 func (s *Query) HStrLen(key string, field interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("HSTRLEN")
-	s.setKey(key)
-	s.append(field)
+	s.SetKey(key)
+	s.SetField(types.ToString(field))
 
 	return s
 }
@@ -402,19 +391,18 @@ func (s *Query) HStrLen(key string, field interface{}) *Query {
 // Hkeys 获取哈希表中的所有域（field）。
 // param: key string
 func (s *Query) Hkeys(key string) *Query {
-
 	s.ResultType = consts.RedisRetTypeStrings
 	s.Op("HKEYS")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
-// HVals 返回所有的 value
+// HVals 返回所有的 val
 // param: key string
 func (s *Query) HVals(key string) *Query {
 	s.ResultType = consts.RedisRetTypeStrings
 	s.Op("HVALS")
-	s.setKey(key)
+	s.SetKey(key)
 
 	return s
 }
@@ -425,12 +413,8 @@ func (s *Query) HVals(key string) *Query {
 func (s *Query) LPush(key string, values ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("LPUSH")
-	s.setKey(key)
-	for k, v := range values {
-		values[k] = s.structToMap(v)
-	}
-	s.append(values...)
-
+	s.SetKey(key)
+	s.addValues(values)
 	return s
 }
 
@@ -440,29 +424,37 @@ func (s *Query) LPush(key string, values ...interface{}) *Query {
 func (s *Query) RPush(key string, values ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("RPUSH")
-	s.setKey(key)
-	for k, v := range values {
-		values[k] = s.structToMap(v)
-	}
-	s.append(values...)
+	s.SetKey(key)
+	s.addValues(values)
 	return s
 }
 
 // LPop 移除并返回列表的第一个元素。
 // param: key string
-func (s *Query) LPop(key string) *Query {
+// param: count int 可选，移除并返回列表元素个数，如果不输入，返回是字符串，否则返回字符串数组
+func (s *Query) LPop(key string, count ...int) *Query {
 	s.ResultType = consts.RedisRetTypeString
 	s.Op("LPOP")
-	s.setKey(key)
+	s.SetKey(key)
+	if len(count) > 0 {
+		s.ResultType = consts.RedisRetTypeStrings
+		s.setRedisParams(consts.CountParams, "count", count[0])
+	}
 	return s
 }
 
 // RPop 移除列表的最后一个元素，返回值为移除的元素。
 // param: key string
-func (s *Query) RPop(key string) *Query {
+// param: count int 可选，移除并返回列表元素个数，如果不输入，返回是字符串，否则返回字符串数组
+func (s *Query) RPop(key string, count ...int) *Query {
 	s.ResultType = consts.RedisRetTypeString
 	s.Op("RPOP")
-	s.setKey(key)
+	s.SetKey(key)
+
+	if len(count) > 0 {
+		s.ResultType = consts.RedisRetTypeStrings
+		s.setRedisParams(consts.CountParams, "count", count[0])
+	}
 	return s
 }
 
@@ -471,22 +463,18 @@ func (s *Query) RPop(key string) *Query {
 func (s *Query) LLen(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("LLEN")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
 // SAdd 将一个或多个成员元素加入到集合中，已经存在于集合的成员元素将被忽略。
 // param: key string
-// param: v ...interface{} 任意类型的多条数据，但是务必确保各条数据的类型保持一致
-func (s *Query) SAdd(key string, values ...interface{}) *Query {
+// param: values ...interface{} 任意类型的多条数据
+func (s *Query) SAdd(key string, members ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("SADD")
-	s.setKey(key)
-
-	for k, v := range values {
-		values[k] = s.structToMap(v)
-	}
-	s.append(values...)
+	s.SetKey(key)
+	s.addValues(members)
 	return s
 }
 
@@ -495,20 +483,18 @@ func (s *Query) SAdd(key string, values ...interface{}) *Query {
 func (s *Query) SMembers(key string) *Query {
 	s.ResultType = consts.RedisRetTypeStrings
 	s.Op("SMEMBERS")
-	s.setKey(key)
+	s.SetKey(key)
 	return s
 }
 
 // SRem 移除集合中的一个或多个成员元素，不存在的成员元素会被忽略
 // param: key string
-// param: v ...interface{} 任意类型的多条数据
+// param: members ...interface{} 任意类型的多条数据
 func (s *Query) SRem(key string, members ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("SREM")
-	s.setKey(key)
-
-	s.append(members...)
-
+	s.SetKey(key)
+	s.addValues(members)
 	return s
 }
 
@@ -517,7 +503,7 @@ func (s *Query) SRem(key string, members ...interface{}) *Query {
 func (s *Query) SCard(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("SCARD")
-	s.setKey(key)
+	s.SetKey(key)
 
 	return s
 }
@@ -528,36 +514,41 @@ func (s *Query) SCard(key string) *Query {
 func (s *Query) SIsMember(key string, member interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("SISMEMBER")
-	s.setKey(key)
-
-	s.append(member)
-
+	s.SetKey(key)
+	s.SetVal(member)
 	return s
 }
 
 // SRandMember 返回集合中的count个随机元素。
 // param: key string
-// param: count int 随机返回元素个数。
+// param: count int 随机返回元素个数。如果不输入，返回是字符串，否则返回字符串数组
 // 如果 count 为正数，且小于集合基数，那么命令返回一个包含 count 个元素的数组，数组中的元素各不相同。
 // 如果 count 大于等于集合基数，那么返回整个集合。
 // 如果 count 为负数，那么命令返回一个数组，数组中的元素可能会重复出现多次，而数组的长度为 count 的绝对值。
-func (s *Query) SRandMember(key string, count int) *Query {
-	s.ResultType = consts.RedisRetTypeStrings
+func (s *Query) SRandMember(key string, count ...int) *Query {
+	s.ResultType = consts.RedisRetTypeString
 	s.Op("SRANDMEMBER")
-	s.setKey(key)
-	s.append(count)
+	s.SetKey(key)
 
+	if len(count) > 0 {
+		s.ResultType = consts.RedisRetTypeStrings
+		s.setRedisParams(consts.CountParams, "count", count[0])
+	}
 	return s
 }
 
 // SPop 移除集合中的指定 key 的一个或多个随机成员，移除后会返回移除的成员。
 // param: key string
-// param: int count
-func (s *Query) SPop(key string, count int) *Query {
+// param: int count，可选，如果不输入，返回是字符串，否则返回字符串数组
+func (s *Query) SPop(key string, count ...int) *Query {
 	s.ResultType = consts.RedisRetTypeStrings
 	s.Op("SPOP")
-	s.setKey(key)
-	s.append(count)
+	s.SetKey(key)
+
+	if len(count) > 0 {
+		s.ResultType = consts.RedisRetTypeStrings
+		s.setRedisParams(consts.CountParams, "count", count[0])
+	}
 
 	return s
 }
@@ -569,9 +560,9 @@ func (s *Query) SPop(key string, count int) *Query {
 func (s *Query) SMove(source, destination string, member interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("SMOVE")
-	s.setKey(source)
-	s.append(destination, member)
-
+	s.SetKey(source)
+	s.SetVal(member)
+	s.setRedisParams(consts.SMoveParams, "destination", destination)
 	return s
 }
 
@@ -584,19 +575,35 @@ func (s *Query) SMove(source, destination string, member interface{}) *Query {
 func (s *Query) ZAdd(key string, args ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZADD")
-	s.setKey(key)
+	s.SetKey(key)
 
 	if len(args) < 2 || len(args)%2 != 0 {
 		s.Error = errs.Newf(errs.ErrReqParamInvalid, "ZADD args should contain pair of memhber and score")
 		return s
 	}
 
-	// 交换参数中的奇偶未知
-	for i := 0; i < len(args); i += 2 {
-		args[i], args[i+1] = args[i+1], s.structToMap(args[i])
+	values := []interface{}{}
+	scores := []interface{}{}
+
+	for k, v := range args {
+		if k%2 == 0 {
+			values = append(values, v)
+		} else {
+			scores = append(scores, v)
+		}
 	}
 
-	s.append(args...)
+	s.addValues(values)
+
+	if s.Unit.Params == nil {
+		s.Unit.Params = map[string]interface{}{}
+	}
+
+	if len(scores) == 1 {
+		s.Unit.Params["score"] = scores[0]
+	} else {
+		s.Unit.Params["scores"] = scores
+	}
 
 	return s
 }
@@ -607,9 +614,8 @@ func (s *Query) ZAdd(key string, args ...interface{}) *Query {
 func (s *Query) ZRem(key string, members ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZREM")
-	s.setKey(key)
-	s.append(members...)
-
+	s.SetKey(key)
+	s.addValues(members)
 	return s
 }
 
@@ -619,7 +625,7 @@ func (s *Query) ZRem(key string, members ...interface{}) *Query {
 func (s *Query) ZRemRangeByScore(key string, min, max interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZREMRANGEBYSCORE")
-	s.setKey(key)
+	s.SetKey(key)
 	s.append(min, max)
 
 	return s
@@ -631,7 +637,7 @@ func (s *Query) ZRemRangeByScore(key string, min, max interface{}) *Query {
 func (s *Query) ZRemRangeByRank(key string, start, stop int) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZREMRANGEBYRANK")
-	s.setKey(key)
+	s.SetKey(key)
 
 	s.append(start, stop)
 
@@ -643,7 +649,7 @@ func (s *Query) ZRemRangeByRank(key string, start, stop int) *Query {
 func (s *Query) ZCard(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZCARD")
-	s.setKey(key)
+	s.SetKey(key)
 
 	return s
 }
@@ -654,7 +660,7 @@ func (s *Query) ZCard(key string) *Query {
 func (s *Query) ZScore(key string, member interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeFloat64
 	s.Op("ZSCORE")
-	s.setKey(key)
+	s.SetKey(key)
 	s.append(member)
 
 	return s
@@ -666,7 +672,7 @@ func (s *Query) ZScore(key string, member interface{}) *Query {
 func (s *Query) ZRank(key string, member interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZRANK")
-	s.setKey(key)
+	s.SetKey(key)
 	s.append(member)
 
 	return s
@@ -678,7 +684,7 @@ func (s *Query) ZRank(key string, member interface{}) *Query {
 func (s *Query) ZRevRank(key string, member interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZREVRANK")
-	s.setKey(key)
+	s.SetKey(key)
 	s.append(member)
 
 	return s
@@ -691,7 +697,7 @@ func (s *Query) ZRevRank(key string, member interface{}) *Query {
 func (s *Query) ZCount(key string, min, max interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZCOUNT")
-	s.setKey(key)
+	s.SetKey(key)
 
 	s.append(min, max)
 
@@ -705,7 +711,7 @@ func (s *Query) ZCount(key string, min, max interface{}) *Query {
 func (s *Query) ZPopMin(key string, count ...int64) *Query {
 	s.ResultType = consts.RedisRetTypeMemberScore
 	s.Op("ZPOPMIN")
-	s.setKey(key)
+	s.SetKey(key)
 
 	if len(count) != 0 {
 		s.append(count[0])
@@ -721,7 +727,7 @@ func (s *Query) ZPopMin(key string, count ...int64) *Query {
 func (s *Query) ZPopMax(key string, count ...int64) *Query {
 	s.ResultType = consts.RedisRetTypeMemberScore
 	s.Op("ZPOPMAX")
-	s.setKey(key)
+	s.SetKey(key)
 
 	if len(count) != 0 {
 		s.append(count[0])
@@ -741,7 +747,7 @@ func (s *Query) ZPopMax(key string, count ...int64) *Query {
 func (s *Query) ZIncrBy(key string, member, incr interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeFloat64
 	s.Op("ZINCRBY")
-	s.setKey(key)
+	s.SetKey(key)
 	s.append(incr, member)
 
 	return s
@@ -761,7 +767,7 @@ func (s *Query) ZRange(key string, start, stop int, withScore ...bool) *Query {
 	}
 
 	s.Op("ZRANGE")
-	s.setKey(key)
+	s.SetKey(key)
 	s.append(start, stop)
 
 	return s
@@ -781,7 +787,7 @@ func (s *Query) ZRangeByScore(key string, min, max interface{}, withScores bool,
 	}
 
 	s.Op("ZRANGEBYSCORE")
-	s.setKey(key)
+	s.SetKey(key)
 
 	if len(limit) == 2 {
 		offset := limit[0]
@@ -808,7 +814,7 @@ func (s *Query) ZRevRange(key string, start, stop int, withScore ...bool) *Query
 	}
 
 	s.Op("ZREVRANGE")
-	s.setKey(key)
+	s.SetKey(key)
 	s.append(start, stop)
 
 	return s
@@ -828,7 +834,7 @@ func (s *Query) ZRevRangeByScore(key string, max, min interface{}, withScore boo
 	}
 
 	s.Op("ZREVRANGEBYSCORE")
-	s.setKey(key)
+	s.SetKey(key)
 
 	if len(limit) == 2 {
 		offset := limit[0]
@@ -836,41 +842,6 @@ func (s *Query) ZRevRangeByScore(key string, max, min interface{}, withScore boo
 		s.append(max, min, "limit", offset, count)
 	} else {
 		s.append(max, min)
-	}
-
-	return s
-}
-
-// setKey 给 key 赋值
-func (s *Query) setKey(key string) *Query {
-	s.Unit.Key = key
-	return s
-}
-
-func (s *Query) setVal(val interface{}) *Query {
-	coder := s.GetCoder()
-	if len(s.Unit.DataType) == 0 {
-		s.Unit.DataType = make(map[string]types.Type)
-	}
-
-	v, err := coder.Encode(codec.EncodeTypeRedisVal, val)
-	if err != nil {
-		s.Error = err
-		return s
-	}
-
-	switch rv := v.(type) {
-	case types.Map:
-		s.Unit.Data = rv
-	case map[string]interface{}:
-		s.Unit.Data = rv
-	case []types.Map:
-		s.Unit.Datas = make([]map[string]interface{}, len(rv))
-		for k, v := range rv {
-			s.Unit.Datas[k] = v
-		}
-	case []map[string]interface{}:
-		s.Unit.Datas = rv
 	}
 
 	return s
@@ -899,4 +870,100 @@ func (s *Query) append(items ...interface{}) *Query {
 		}
 	}
 	return s
+}
+
+func (s *Query) addValues(values []interface{}) *Query {
+	if len(values) == 0 {
+		s.Error = errs.Newf(errs.ErrReqParamInvalid, "%s empty value", s.Unit.Op)
+		return s
+	}
+
+	if len(values) == 1 {
+		s.SetVal(values[0])
+	} else {
+		for _, v := range values {
+			ev, err := s.GetCoder().Encode(codec.EncodeTypeRedisVal, v)
+			if err != nil {
+				s.Error = err
+				return s
+			}
+			s.Unit.Args = append(s.Unit.Args, ev)
+		}
+	}
+
+	return s
+}
+
+func (s *Query) setRedisMap(val interface{}) *Query {
+	m, err := types.ToMap(val, s.GetCoder().GetTag())
+	if err != nil {
+		s.Error = errs.Newf(errs.ErrReqParamInvalid, "mset error: %v", err)
+		return s
+	}
+
+	for k, v := range m {
+		ev, e := s.GetCoder().Encode(codec.EncodeTypeRedisVal, v)
+		if e != nil {
+			s.Error = e
+			return s
+		}
+		m[k] = ev
+	}
+
+	s.Unit.Data = m
+	return s
+}
+
+func (s *Query) setRedisParams(paramInfos []*consts.RedisParamInfo, params ...interface{}) {
+	var jump int
+
+	for k, v := range params {
+		if jump > 0 {
+			jump--
+			continue
+		}
+
+		name, ok := v.(string)
+		if !ok {
+			s.Error = errs.Newf(errs.ErrReqParamInvalid, "redis cmd %s arg name must be string [%v]", s.Unit.Op, v)
+			return
+		}
+
+		paramInfo, find := consts.FindRedisParam(paramInfos, name)
+		if !find {
+			s.Error = errs.Newf(errs.ErrReqParamInvalid, "redis cmd %s not support arg %s", s.Unit.Op, name)
+			return
+		}
+
+		if s.Unit.Params == nil {
+			s.Unit.Params = map[string]interface{}{}
+		}
+
+		switch paramInfo.Cnt {
+		case 0, 1:
+			s.Unit.Params[name] = true
+		case 2:
+			if len(params) < k+2 {
+				s.Error = errs.Newf(errs.ErrReqParamInvalid, "redis cmd %s params number is invalid", s.Unit.Op)
+				return
+			}
+			s.Unit.Params[name] = params[k+1]
+			jump = 1
+		default:
+			if len(params) < k+paramInfo.Cnt {
+				s.Error = errs.Newf(errs.ErrReqParamInvalid, "redis cmd %s params number is invalid", s.Unit.Op)
+				return
+			}
+
+			tmp := []interface{}{}
+			for i := 1; i < paramInfo.Cnt; i++ {
+				tmp = append(tmp, params[k+i])
+			}
+
+			s.Unit.Params[name] = tmp
+			jump = paramInfo.Cnt - 1
+		}
+	}
+
+	return
 }

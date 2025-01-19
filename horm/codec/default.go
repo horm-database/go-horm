@@ -37,11 +37,10 @@ type defaultCodec struct {
 type EncodeType int8
 
 const (
-	EncodeTypeHmSET       EncodeType = 1
-	EncodeTypeRedisVal    EncodeType = 2
-	EncodeTypeInsertData  EncodeType = 3
-	EncodeTypeReplaceData EncodeType = 4
-	EncodeTypeUpdateData  EncodeType = 5
+	EncodeTypeInsertData  EncodeType = 1
+	EncodeTypeReplaceData EncodeType = 2
+	EncodeTypeUpdateData  EncodeType = 3
+	EncodeTypeRedisVal    EncodeType = 4
 )
 
 // SetMarshal set marshal/unmarshal
@@ -88,39 +87,34 @@ func (dc *defaultCodec) Encode(typ EncodeType, data interface{}) (interface{}, e
 		return nil, nil
 	}
 
-	switch typ {
-	case EncodeTypeHmSET:
-		return dc.hmSet(reflect.Indirect(reflect.ValueOf(data)))
-	default:
-		val := types.Indirect(data)
-		switch v := val.(type) {
-		case string, []byte, bool, int, int8, int16, int32, int64, uint,
-			uint8, uint16, uint32, uint64, float32, float64, json.Number, time.Time,
-			types.Map, []types.Map, map[string]interface{}, []map[string]interface{}:
-			return v, nil
-		}
-
-		// 结构体 转 map
-		var op int8 = types.OpUnknown
-
-		switch typ {
-		case EncodeTypeInsertData:
-			op = types.OpInsert
-		case EncodeTypeReplaceData:
-			op = types.OpReplace
-		case EncodeTypeUpdateData:
-			op = types.OpUpdate
-		}
-
-		rv := reflect.ValueOf(val)
-		if types.IsStruct(rv.Type()) {
-			return types.StructToMap(rv, dc.GetTag(), op), nil
-		} else if types.IsStructArray(rv) {
-			return types.StructsToMaps(rv, dc.GetTag(), op), nil
-		}
-
-		return data, nil
+	val := types.Indirect(data)
+	switch v := val.(type) {
+	case string, []byte, bool, int, int8, int16, int32, int64, uint,
+		uint8, uint16, uint32, uint64, float32, float64, json.Number, time.Time,
+		types.Map, []types.Map, map[string]interface{}, []map[string]interface{}:
+		return v, nil
 	}
+
+	// 结构体 转 map
+	var op int8 = types.OpUnknown
+
+	switch typ {
+	case EncodeTypeInsertData:
+		op = types.OpInsert
+	case EncodeTypeReplaceData:
+		op = types.OpReplace
+	case EncodeTypeUpdateData:
+		op = types.OpUpdate
+	}
+
+	rv := reflect.ValueOf(val)
+	if types.IsStruct(rv.Type()) {
+		return types.StructToMap(rv, dc.GetTag(), op), nil
+	} else if types.IsStructArray(rv) {
+		return types.StructsToMaps(rv, dc.GetTag(), op), nil
+	}
+
+	return data, nil
 }
 
 // Decode 解码

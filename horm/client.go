@@ -81,7 +81,7 @@ func (o *cli) Exec(ctx context.Context, q *Query, retReceiver ...interface{}) (i
 		return true, nil
 	}
 
-	if len(retReceiver) == 0 && q.Unit.Op == consts.OpExists {
+	if len(retReceiver) == 0 && (q.Unit.Op == consts.OpExists || q.Unit.Op == consts.OpHExists) {
 		var exists bool
 		err = q.GetCoder().Decode(q.ResultType, result, []interface{}{&exists})
 		if err != nil {

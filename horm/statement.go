@@ -252,6 +252,72 @@ func (s *Query) Having(having Where) *Query {
 	return s
 }
 
+// SetKey 给 key 赋值
+func (s *Query) SetKey(key string) *Query {
+	s.Unit.Key = key
+	return s
+}
+
+// SetField 给 field 赋值
+func (s *Query) SetField(field string) *Query {
+	s.Unit.Field = field
+	return s
+}
+
+func (s *Query) SetVal(val interface{}) *Query {
+	if len(s.Unit.DataType) == 0 {
+		s.Unit.DataType = make(map[string]types.Type)
+	}
+
+	if val == nil {
+		s.Unit.Val = val
+	}
+
+	v, err := s.GetCoder().Encode(codec.EncodeTypeRedisVal, val)
+	if err != nil {
+		s.Error = err
+		return s
+	}
+
+	switch vv := v.(type) {
+	case types.Map:
+		s.Unit.Data = vv
+		s.setDataType(vv)
+	case map[string]interface{}:
+		s.Unit.Data = vv
+		s.setDataType(vv)
+	case []types.Map:
+		s.Unit.Datas = make([]map[string]interface{}, len(vv))
+		for k, iv := range vv {
+			s.Unit.Datas[k] = iv
+		}
+
+		if len(vv) > 0 {
+			s.setDataType(vv[0])
+		}
+	case []map[string]interface{}:
+		s.Unit.Datas = vv
+		if len(vv) > 0 {
+			s.setDataType(vv[0])
+		}
+	default:
+		s.Unit.Val = v
+	}
+
+	return s
+}
+
+// SetParam 与数据库相关的请求参数，例如 redis 的 WITHSCORES， elastic 的 collapse、runtime_mappings、track_total_hits 等等。
+func (s *Query) SetParam(key string, value interface{}) *Query {
+	if s.Unit.Params == nil {
+		s.Unit.Params = map[string]interface{}{key: value}
+	} else {
+		s.Unit.Params[key] = value
+	}
+
+	return s
+}
+
 // Bytes 字节码
 func (s *Query) Bytes(bs []byte) *Query {
 	s.Unit.Bytes = bs
@@ -276,6 +342,17 @@ func (s *Query) Source(q string, args ...interface{}) *Query {
 	return s
 }
 
+// Extend 扩展信息会被传入到每个插件。用于自定义功能
+func (s *Query) Extend(key string, value interface{}) *Query {
+	if s.Unit.Extend == nil {
+		s.Unit.Extend = map[string]interface{}{key: value}
+	} else {
+		s.Unit.Extend[key] = value
+	}
+
+	return s
+}
+
 // Create 创建表
 func (s *Query) Create(name, shard string, ifNotExists ...bool) *Query {
 	if len(ifNotExists) > 0 && ifNotExists[0] {
@@ -285,28 +362,6 @@ func (s *Query) Create(name, shard string, ifNotExists ...bool) *Query {
 	s.Op("create")
 	s.Name(name)
 	s.Shard(shard)
-	return s
-}
-
-// SetParam 与数据库相关的请求参数，例如 redis 的 WITHSCORES， elastic 的 collapse、runtime_mappings、track_total_hits 等等。
-func (s *Query) SetParam(key string, value interface{}) *Query {
-	if s.Unit.Params == nil {
-		s.Unit.Params = map[string]interface{}{key: value}
-	} else {
-		s.Unit.Params[key] = value
-	}
-
-	return s
-}
-
-// Extend 扩展信息会被传入到每个插件。用于自定义功能
-func (s *Query) Extend(key string, value interface{}) *Query {
-	if s.Unit.Extend == nil {
-		s.Unit.Extend = map[string]interface{}{key: value}
-	} else {
-		s.Unit.Extend[key] = value
-	}
-
 	return s
 }
 
@@ -365,14 +420,4 @@ func (s *Query) setDataType(data map[string]interface{}) *Query {
 		}
 	}
 	return s
-}
-
-// struct 转 map
-func (s *Query) structToMap(data interface{}) (ret interface{}) {
-	mapData, err := s.GetCoder().Encode(codec.EncodeTypeUpdateData, data)
-	if err == nil {
-		return mapData
-	}
-
-	return data
 }

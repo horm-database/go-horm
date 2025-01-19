@@ -15,7 +15,7 @@
 package codec
 
 import (
-	"encoding/json"
+	j "encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -24,87 +24,6 @@ import (
 	redigo "github.com/gomodule/redigo/redis"
 	"github.com/horm-database/common/types"
 )
-
-// hmset convert to []interface{} structure , field is determined according to tag
-// struct -> [field1, value1, field2, value2 ...]
-// map[key]value -> [key1, value1 , key2, value2 ...]
-// slice [value1, value2 ...]
-func (dc *defaultCodec) hmSet(rv reflect.Value) (interface{}, error) {
-	switch rv.Kind() {
-	case reflect.Struct:
-		m := types.StructToMap(rv, dc.GetTag(), types.OpUpdate)
-		return dc.hmsetMap(reflect.ValueOf(m))
-	case reflect.Slice, reflect.Array:
-		return dc.hmsetSlice(rv)
-	case reflect.Map:
-		return dc.hmsetMap(rv)
-	default:
-		return nil, fmt.Errorf("encode not support %s", rv.Kind().String())
-	}
-}
-
-// []interface{} -> [value1, value2 ...]
-func (dc *defaultCodec) hmsetSlice(rv reflect.Value) ([]interface{}, error) {
-	l := rv.Len()
-	var args = make([]interface{}, l)
-
-	for i := 0; i < l; i++ {
-		v, err := dc.encodeBase(rv.Index(i))
-		if err != nil {
-			return nil, err
-		}
-		args[i] = v
-	}
-	return args, nil
-}
-
-// map[key]value -> [key1, value1 , key2, value2 ...]
-func (dc *defaultCodec) hmsetMap(rv reflect.Value) ([]interface{}, error) {
-	var args = make([]interface{}, 2*rv.Len())
-	var i int
-
-	for _, k := range rv.MapKeys() {
-		var key, val interface{}
-		var err error
-
-		if key, err = dc.encodeBase(k); err != nil {
-			return nil, err
-		}
-		if val, err = dc.encodeBase(rv.MapIndex(k)); err != nil {
-			return nil, err
-		}
-		args[i] = fmt.Sprint(key)
-		i++
-		args[i] = val
-		i++
-	}
-	return args, nil
-}
-
-func (dc *defaultCodec) encodeBase(rv reflect.Value) (interface{}, error) {
-	switch rv.Kind() {
-	case reflect.Ptr, reflect.Interface:
-		if rv.IsNil() {
-			return nil, nil
-		}
-		return dc.encodeBase(rv.Elem())
-	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32,
-		reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128, reflect.String:
-		return rv.Interface(), nil
-	case reflect.Struct:
-		return dc.m(rv.Interface())
-	case reflect.Map:
-		return dc.m(rv.Interface())
-	case reflect.Slice, reflect.Array:
-		if rv.Type().Elem().Kind() == reflect.Uint8 { //is bytes
-			return rv.Interface(), nil
-		}
-		return dc.m(rv.Interface())
-	default:
-		return nil, nil
-	}
-}
 
 func (dc *defaultCodec) decodeBase(src interface{}, dest interface{}) (err error) {
 	switch s := src.(type) {
@@ -122,7 +41,7 @@ func (dc *defaultCodec) decodeBase(src interface{}, dest interface{}) (err error
 		return dc.assignBool(dest, s)
 	case []interface{}:
 		return dc.assignInterfaces(dest, s)
-	case json.Number:
+	case j.Number:
 		return dc.assignString(dest, s.String())
 	case redigo.Error:
 		err = s
