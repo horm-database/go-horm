@@ -1754,6 +1754,24 @@ func queryByID(ctx context.Context) {
 ]
 ```
 
+### snowflake 唯一ID
+当我们将struct标签属性 onuniqueid 打开时，插入数据需要用到 snowflake.GenerateID() 自动生成ID，这时必须为每台机器设置不同的 machine_id，
+否则生成的ID可能会有冲突。 利用该算法，我们可以生成一个全局唯一的 ID，而且 ID 里面包含了时间、机器和自增序列信息。虽然不含业务信息，
+但是可以通过时间，我们可能会去找到对应的存储分区信息，冷热分离的时候，比如3天以上的数据存在冷分区，我们可以通过 ID 就知道该数据存在哪个分区。
+```go
+// github.com/horm-database/common/snowflake
+func SetMachineID(machineID int)
+func GenerateID() uint64
+func ParseID(id uint64) (t time.Time, machineID int, sn uint64)
+```
+
+我们如果要用到 snowflake 自动生成主键 ID，那么务必在 orm.yaml 配置里面加上 machine_id 来防止碰撞。
+```yaml
+machine: server.access.gz003      # 本地机器名（容器名）
+machine_id: 3                     # 本地机器编号（容器编号），当我们将struct标签属性 onuniqueid 打开时，插入数据需要用到 snowflake.GenerateID() 自动生成ID，这时必须为每台机器设置不同的 machine_id，否则生成的ID可能会有冲突
+local_ip: 127.0.0.1               # 本地IP，容器内为容器ip，物理机或虚拟机为本机ip
+...
+```
 ## where 查询条件
 ### 操作符
 ```go
@@ -4701,3 +4719,6 @@ isNil, err = horm.NewQuery("redis_student").ZRevRangeByScore("student_zset", 70,
 
 返回结果：
 
+
+# 事务
+# 插件编排
