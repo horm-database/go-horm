@@ -15,8 +15,6 @@
 package horm
 
 import (
-	"strconv"
-
 	"github.com/horm-database/common/consts"
 	"github.com/horm-database/common/errs"
 	"github.com/horm-database/common/types"
@@ -36,7 +34,7 @@ func (s *Query) Expire(key string, seconds int) *Query {
 	s.ResultType = consts.RedisRetTypeNil
 	s.Op("EXPIRE")
 	s.SetKey(key)
-	s.Unit.Val = seconds
+	s.SetParam("seconds", seconds)
 	return s
 }
 
@@ -90,7 +88,7 @@ func (s *Query) SetEX(key string, val interface{}, seconds int) *Query {
 	s.Op("SETEX")
 	s.SetKey(key)
 	s.SetVal(val)
-	s.setRedisParams(consts.SetExParams, "seconds", seconds)
+	s.SetParam("seconds", seconds)
 	return s
 }
 
@@ -146,12 +144,12 @@ func (s *Query) Decr(key string) *Query {
 
 // IncrBy 将 key 中储存的数字加上指定的增量值。如果 key 不存在，那么 key 的值会先被初始化为 0 ，然后再执行 INCRBY 命令。如果值包含错误的类型，或字符串类型的值不能表示为数字，那么返回一个错误。
 // param: key string
-// param: n string 自增数量
-func (s *Query) IncrBy(key string, n int) *Query {
+// param: incr string 自增数量
+func (s *Query) IncrBy(key string, incr int) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("INCRBY")
 	s.SetKey(key)
-	s.Unit.Val = n
+	s.SetParam("increment", incr)
 	return s
 }
 
@@ -190,7 +188,8 @@ func (s *Query) SetBit(key string, offset uint32, value int) *Query {
 		return s
 	}
 
-	s.setRedisParams(consts.SetGetBitParams, "offset", offset, "value", value)
+	s.SetParam("offset", offset)
+	s.SetParam("value", value)
 	return s
 }
 
@@ -201,7 +200,7 @@ func (s *Query) GetBit(key string, offset uint32) *Query {
 	s.ResultType = consts.RedisRetTypeBool
 	s.Op("GETBIT")
 	s.SetKey(key)
-	s.setRedisParams(consts.SetGetBitParams, "offset", offset)
+	s.SetParam("offset", offset)
 	return s
 }
 
@@ -282,26 +281,26 @@ func (s *Query) HmSet(key string, hval interface{}) *Query {
 // HIncrBy 为哈希表中的字段值加上指定增量值。
 // param: key string
 // param: field string
-// param: n string 自增数量
-func (s *Query) HIncrBy(key string, field interface{}, val int) *Query {
+// param: incr string 自增数量
+func (s *Query) HIncrBy(key string, field interface{}, incr int) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("HINCRBY")
 	s.SetKey(key)
 	s.SetField(types.ToString(field))
-	s.SetVal(val)
+	s.SetParam("increment", incr)
 	return s
 }
 
 // HIncrByFloat 为哈希表中的字段值加上指定增量浮点数。
 // param: key string
 // param: field string
-// param: val float64 自增数量
-func (s *Query) HIncrByFloat(key string, field interface{}, val float64) *Query {
+// param: incr float64 自增数量
+func (s *Query) HIncrByFloat(key string, field interface{}, incr float64) *Query {
 	s.ResultType = consts.RedisRetTypeFloat64
 	s.Op("HINCRBYFLOAT")
 	s.SetKey(key)
 	s.SetField(types.ToString(field))
-	s.SetVal(val)
+	s.SetParam("increment", incr)
 	return s
 }
 
@@ -438,7 +437,7 @@ func (s *Query) LPop(key string, count ...int) *Query {
 	s.SetKey(key)
 	if len(count) > 0 {
 		s.ResultType = consts.RedisRetTypeStrings
-		s.setRedisParams(consts.CountParams, "count", count[0])
+		s.SetParam("count", count[0])
 	}
 	return s
 }
@@ -453,7 +452,7 @@ func (s *Query) RPop(key string, count ...int) *Query {
 
 	if len(count) > 0 {
 		s.ResultType = consts.RedisRetTypeStrings
-		s.setRedisParams(consts.CountParams, "count", count[0])
+		s.SetParam("count", count[0])
 	}
 	return s
 }
@@ -532,7 +531,7 @@ func (s *Query) SRandMember(key string, count ...int) *Query {
 
 	if len(count) > 0 {
 		s.ResultType = consts.RedisRetTypeStrings
-		s.setRedisParams(consts.CountParams, "count", count[0])
+		s.SetParam("count", count[0])
 	}
 	return s
 }
@@ -547,7 +546,7 @@ func (s *Query) SPop(key string, count ...int) *Query {
 
 	if len(count) > 0 {
 		s.ResultType = consts.RedisRetTypeStrings
-		s.setRedisParams(consts.CountParams, "count", count[0])
+		s.SetParam("count", count[0])
 	}
 
 	return s
@@ -562,7 +561,7 @@ func (s *Query) SMove(source, destination string, member interface{}) *Query {
 	s.Op("SMOVE")
 	s.SetKey(source)
 	s.SetVal(member)
-	s.setRedisParams(consts.SMoveParams, "destination", destination)
+	s.SetParam("destination", destination)
 	return s
 }
 
@@ -626,8 +625,8 @@ func (s *Query) ZRemRangeByScore(key string, min, max interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZREMRANGEBYSCORE")
 	s.SetKey(key)
-	s.append(min, max)
-
+	s.SetParam("min", min)
+	s.SetParam("max", max)
 	return s
 }
 
@@ -638,9 +637,8 @@ func (s *Query) ZRemRangeByRank(key string, start, stop int) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZREMRANGEBYRANK")
 	s.SetKey(key)
-
-	s.append(start, stop)
-
+	s.SetParam("start", start)
+	s.SetParam("stop", stop)
 	return s
 }
 
@@ -650,7 +648,6 @@ func (s *Query) ZCard(key string) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZCARD")
 	s.SetKey(key)
-
 	return s
 }
 
@@ -661,8 +658,7 @@ func (s *Query) ZScore(key string, member interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeFloat64
 	s.Op("ZSCORE")
 	s.SetKey(key)
-	s.append(member)
-
+	s.SetVal(member)
 	return s
 }
 
@@ -673,8 +669,7 @@ func (s *Query) ZRank(key string, member interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZRANK")
 	s.SetKey(key)
-	s.append(member)
-
+	s.SetVal(member)
 	return s
 }
 
@@ -685,8 +680,7 @@ func (s *Query) ZRevRank(key string, member interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZREVRANK")
 	s.SetKey(key)
-	s.append(member)
-
+	s.SetVal(member)
 	return s
 }
 
@@ -698,9 +692,8 @@ func (s *Query) ZCount(key string, min, max interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeInt64
 	s.Op("ZCOUNT")
 	s.SetKey(key)
-
-	s.append(min, max)
-
+	s.SetParam("min", min)
+	s.SetParam("max", max)
 	return s
 }
 
@@ -713,8 +706,8 @@ func (s *Query) ZPopMin(key string, count ...int64) *Query {
 	s.Op("ZPOPMIN")
 	s.SetKey(key)
 
-	if len(count) != 0 {
-		s.append(count[0])
+	if len(count) > 0 {
+		s.SetParam("count", count[0])
 	}
 
 	return s
@@ -729,8 +722,8 @@ func (s *Query) ZPopMax(key string, count ...int64) *Query {
 	s.Op("ZPOPMAX")
 	s.SetKey(key)
 
-	if len(count) != 0 {
-		s.append(count[0])
+	if len(count) > 0 {
+		s.SetParam("count", count[0])
 	}
 
 	return s
@@ -748,8 +741,8 @@ func (s *Query) ZIncrBy(key string, member, incr interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeFloat64
 	s.Op("ZINCRBY")
 	s.SetKey(key)
-	s.append(incr, member)
-
+	s.SetVal(member)
+	s.SetParam("increment", incr)
 	return s
 }
 
@@ -757,18 +750,22 @@ func (s *Query) ZIncrBy(key string, member, incr interface{}) *Query {
 // param: key string
 // param: int start, stop 以 0 表示有序集第一个成员，以 1 表示有序集第二个成员，你也可以使用负数下标，
 // 以 -1 表示最后一个成员， -2 表示倒数第二个成员，以此类推。
-// param: withScore 是否返回有序集的分数， true - 返回，false - 不返回，默认不返回，结果分开在两个数组存储，但是数组下标是一一对应的，比如 member[3] 成员的分数是 score[3]
-func (s *Query) ZRange(key string, start, stop int, withScore ...bool) *Query {
+// param: args [BYSCORE | BYLEX] [REV] [LIMIT offset count] [WITHSCORES]
+// WITHSCORES 是否返回有序集的分数，结果分开在两个数组存储，但是数组下标是一一对应的，比如 member[3] 成员的分数是 score[3]
+func (s *Query) ZRange(key string, start, stop interface{}, args ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeStrings
-
-	if len(withScore) > 0 && withScore[0] {
-		s.SetParam("with_scores", true)
-		s.ResultType = consts.RedisRetTypeMemberScore
-	}
 
 	s.Op("ZRANGE")
 	s.SetKey(key)
-	s.append(start, stop)
+
+	params := []interface{}{"start", start, "stop", stop}
+	params = append(params, args...)
+	s.setRedisParams(consts.ZRangeParams, params...)
+
+	withScores, _ := types.GetBool(s.Unit.Params, "WITHSCORES")
+	if withScores {
+		s.ResultType = consts.RedisRetTypeMemberScore
+	}
 
 	return s
 }
@@ -776,25 +773,21 @@ func (s *Query) ZRange(key string, start, stop int, withScore ...bool) *Query {
 // ZRangeByScore 根据分数返回有序集中指定区间的成员，顺序从小到大
 // param: key string
 // param: int min, max 分数的范围，类型必须为 int, float，但是 -inf +inf 表示负正无穷大
-// param: withScores 是否返回有序集的分数， true - 返回，false - 不返回，默认不返回，结果分开在两个数组存储，但是数组下标是一一对应的，比如 member[3] 成员的分数是 score[3]
+// param: WITHSCORES 是否返回有序集的分数，结果分开在两个数组存储，但是数组下标是一一对应的，比如 member[3] 成员的分数是 score[3]
 // param: LIMIT信息，包含 offset count
-func (s *Query) ZRangeByScore(key string, min, max interface{}, withScores bool, limit ...int64) *Query {
+func (s *Query) ZRangeByScore(key string, min, max interface{}, args ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeStrings
-
-	if withScores {
-		s.SetParam("with_scores", true)
-		s.ResultType = consts.RedisRetTypeMemberScore
-	}
 
 	s.Op("ZRANGEBYSCORE")
 	s.SetKey(key)
 
-	if len(limit) == 2 {
-		offset := limit[0]
-		count := limit[1]
-		s.append(min, max, "limit", offset, count)
-	} else {
-		s.append(min, max)
+	params := []interface{}{"min", min, "max", max}
+	params = append(params, args...)
+	s.setRedisParams(consts.ZRangeByScoreParams, params...)
+
+	withScores, _ := types.GetBool(s.Unit.Params, "WITHSCORES")
+	if withScores {
+		s.ResultType = consts.RedisRetTypeMemberScore
 	}
 
 	return s
@@ -804,18 +797,21 @@ func (s *Query) ZRangeByScore(key string, min, max interface{}, withScores bool,
 // param: key string
 // param: start, stop 排名区间，以 0 表示有序集第一个成员，以 1 表示有序集第二个成员，你也可以使用负数下标，
 // 以 -1 表示最后一个成员， -2 表示倒数第二个成员，以此类推。
-// param: withScore 是否返回有序集的分数， true - 返回，false - 不返回，默认不返回，结果分开在两个数组存储，但是数组下标是一一对应的，比如 member[3] 成员的分数是 score[3]
-func (s *Query) ZRevRange(key string, start, stop int, withScore ...bool) *Query {
+// param: WITHSCORES 是否返回有序集的分数，结果分开在两个数组存储，但是数组下标是一一对应的，比如 member[3] 成员的分数是 score[3]
+func (s *Query) ZRevRange(key string, start, stop int, args ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeStrings
-
-	if len(withScore) > 0 && withScore[0] {
-		s.SetParam("with_scores", true)
-		s.ResultType = consts.RedisRetTypeMemberScore
-	}
 
 	s.Op("ZREVRANGE")
 	s.SetKey(key)
-	s.append(start, stop)
+
+	params := []interface{}{"start", start, "stop", stop}
+	params = append(params, args...)
+	s.setRedisParams(consts.ZRevRangeParams, params...)
+
+	withScores, _ := types.GetBool(s.Unit.Params, "WITHSCORES")
+	if withScores {
+		s.ResultType = consts.RedisRetTypeMemberScore
+	}
 
 	return s
 }
@@ -823,52 +819,23 @@ func (s *Query) ZRevRange(key string, start, stop int, withScore ...bool) *Query
 // ZRevRangeByScore 返回有序集中指定分数区间内的所有的成员。有序集成员按分数值递减(从大到小)的次序排列。
 // param: key string
 // param: max, min  interface{} 分数区间，类型为整数或双精度浮点数，但是 -inf +inf 表示负正无穷大
-// param: withScore 是否返回有序集的分数， true - 返回，false - 不返回，默认不返回，结果分开在两个数组存储，但是数组下标是一一对应的，比如 member[3] 成员的分数是 score[3]
+// param: WITHSCORES 是否返回有序集的分数，结果分开在两个数组存储，但是数组下标是一一对应的，比如 member[3] 成员的分数是 score[3]
 // param: LIMIT 信息，包含 offset count
-func (s *Query) ZRevRangeByScore(key string, max, min interface{}, withScore bool, limit ...int64) *Query {
+func (s *Query) ZRevRangeByScore(key string, max, min interface{}, args ...interface{}) *Query {
 	s.ResultType = consts.RedisRetTypeStrings
-
-	if withScore {
-		s.SetParam("with_scores", true)
-		s.ResultType = consts.RedisRetTypeMemberScore
-	}
 
 	s.Op("ZREVRANGEBYSCORE")
 	s.SetKey(key)
 
-	if len(limit) == 2 {
-		offset := limit[0]
-		count := limit[1]
-		s.append(max, min, "limit", offset, count)
-	} else {
-		s.append(max, min)
+	params := []interface{}{"max", max, "min", min}
+	params = append(params, args...)
+	s.setRedisParams(consts.ZRevRangeByScoreParams, params...)
+
+	withScores, _ := types.GetBool(s.Unit.Params, "WITHSCORES")
+	if withScores {
+		s.ResultType = consts.RedisRetTypeMemberScore
 	}
 
-	return s
-}
-
-// append arg 参数拼接
-func (s *Query) append(items ...interface{}) *Query {
-	coder := s.GetCoder()
-
-	if len(s.Unit.DataType) == 0 {
-		s.Unit.DataType = make(map[string]types.Type)
-	}
-
-	for k, item := range items {
-		mv, err := coder.Encode(codec.EncodeTypeRedisVal, item)
-		if err != nil {
-			s.Error = err
-			return s
-		}
-
-		s.Unit.Args = append(s.Unit.Args, mv)
-
-		typ := consts.GetDataType(mv)
-		if typ != 0 {
-			s.Unit.DataType[strconv.Itoa(k)] = typ
-		}
-	}
 	return s
 }
 
