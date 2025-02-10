@@ -356,10 +356,11 @@ type Unit struct {
 	Size   int                    `json:"size,omitempty"`   // size per page
 	From   uint64                 `json:"from,omitempty"`   // offset
 
-	// 数据更新
-	Val      interface{}              `json:"val,omitempty"`       // set val (not map/[]map)
-	Data     map[string]interface{}   `json:"data,omitempty"`      // add/update one data
-	Datas    []map[string]interface{} `json:"datas,omitempty"`     // batch add/update data
+	// data maintain
+	Val      interface{}              `json:"val,omitempty"`       // 单条记录 val (not map/[]map)
+	Data     map[string]interface{}   `json:"data,omitempty"`      // add/update one map data
+	Datas    []map[string]interface{} `json:"datas,omitempty"`     // batch add/update map data
+	Args     []interface{}            `json:"args,omitempty"`      // multiple args, 还可用于 query 语句的参数，或者 redis 协议，如 MGET、HMGET、HDEL 等
 	DataType map[string]types.Type    `json:"data_type,omitempty"` // 数据类型（主要用于 clickhouse，对于数据类型有强依赖），请求 json 不区分 int8、int16、int32、int64 等，只有 Number 类型，bytes 也会被当成 string 处理。
 
 	// group by
@@ -386,7 +387,6 @@ type Unit struct {
 
 	// 直接送 Query 语句，需要拥有库的 表权限、或 root 权限。具体参数为 args
 	Query string        `json:"query,omitempty"`
-	Args  []interface{} `json:"args,omitempty"` // args 参数的数据类型存于 data_type
 
 	// Extend 扩展信息，作用于插件
 	Extend map[string]interface{} `json:"extend,omitempty"`
