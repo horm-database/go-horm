@@ -358,8 +358,8 @@ type Unit struct {
 
 	// data maintain
 	Val      interface{}              `json:"val,omitempty"`       // 单条记录 val (not map/[]map)
-	Data     map[string]interface{}   `json:"data,omitempty"`      // add/update one map data
-	Datas    []map[string]interface{} `json:"datas,omitempty"`     // batch add/update map data
+	Data     map[string]interface{}   `json:"data,omitempty"`      // maintain one map data
+	Datas    []map[string]interface{} `json:"datas,omitempty"`     // maintain multiple map data
 	Args     []interface{}            `json:"args,omitempty"`      // multiple args, 还可用于 query 语句的参数，或者 redis 协议，如 MGET、HMGET、HDEL 等
 	DataType map[string]types.Type    `json:"data_type,omitempty"` // 数据类型（主要用于 clickhouse，对于数据类型有强依赖），请求 json 不区分 int8、int16、int32、int64 等，只有 Number 类型，bytes 也会被当成 string 处理。
 
@@ -382,10 +382,10 @@ type Unit struct {
 	// bytes 字节流
 	Bytes []byte `json:"bytes,omitempty"`
 
-	// params 与数据库特性相关的附加参数，例如 redis 的 WITHSCORES，以及 elastic 的 refresh、collapse、runtime_mappings、track_total_hits 等等。
+	// params 与数据库特性相关的附加参数，例如 redis 的 withscores、EX、NX、等，以及 elastic 的 refresh、collapse、runtime_mappings、track_total_hits 等等。
 	Params map[string]interface{} `json:"params,omitempty"`
 
-	// 直接送 Query 语句，需要拥有库的 表权限、或 root 权限。具体参数为 args
+	// 直接送 Query 语句，需要拥有库的表操作权限、或 root 权限。具体参数为 args
 	Query string        `json:"query,omitempty"`
 
 	// Extend 扩展信息，作用于插件
