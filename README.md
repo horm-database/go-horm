@@ -357,10 +357,10 @@ type Unit struct {
 	From   uint64                 `json:"from,omitempty"`   // offset
 
 	// data maintain
-	Val      interface{}              `json:"val,omitempty"`       // 单条记录 val (not map/[]map)
+	Val      interface{}              `json:"val,omitempty"`       // 单条记录 val (not map)
 	Data     map[string]interface{}   `json:"data,omitempty"`      // maintain one map data
 	Datas    []map[string]interface{} `json:"datas,omitempty"`     // maintain multiple map data
-	Args     []interface{}            `json:"args,omitempty"`      // multiple args, 还可用于 query 语句的参数，或者 redis 协议，如 MGET、HMGET、HDEL 等
+	Args     []interface{}            `json:"args,omitempty"`      // multiple args, 当维护的是单条记录，但是该记录是一个数组结构，最好是放到 val 里面去，args 还可用于 query 语句的参数，或者 redis 协议，如 MGET、HMGET、HDEL 等
 	DataType map[string]types.Type    `json:"data_type,omitempty"` // 数据类型（主要用于 clickhouse，对于数据类型有强依赖），请求 json 不区分 int8、int16、int32、int64 等，只有 Number 类型，bytes 也会被当成 string 处理。
 
 	// group by
@@ -4721,6 +4721,12 @@ isNil, err = horm.NewQuery("redis_student").ZRevRangeByScore("student_zset", 70,
 
 # 事务
 # 插件编排
+   插件是我们统一接入服务的核心概念，通过插件，我们可以为数据库的执行赋能，并将能力沉淀复用。在统一接入服务，插件拥有很高的优先级，他可以决定是否
+运行后面的插件和数据库语句执行，也可以决定是否直接返回错误， 或者已经写好的内容， 所以在使用插件的时候慎用，而插件编写者，尽量提供开关来控制，
+在插件异常的时候，是否继续执行后续插件和数据库语句，例如缓存，如果已经获取到数据，则不需要再执行数据库，这是我们预期的事情，再比如日志或者监控、
+统计系统等，不应该影响主流程的执行，我们要确保插件流程的 panic 被捕获并得到正确处理。这里推荐将一般的插件函数，逻辑拆成3个逻辑， 
+前置处理，HandleFunc 执行，后置处理，在前置处理函数和后置处理函数里加上 defer 来做 panic recover，保障 HandleFunc 正确执行。
+
 ## 插件配置
 ## 插件版本
 ### 版本回滚
